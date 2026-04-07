@@ -1,0 +1,104 @@
+name: Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+    - name: Checkout cmlxc
+      uses: actions/checkout@v4
+      with:
+        path: cmlxc
+
+    - name: Install Incus (Zabbly)
+      run: |
+        sudo mkdir -p /etc/apt/keyrings
+        sudo curl -fsSL https://pkgs.zabbly.com/key.asc -o /etc/apt/keyrings/zabbly.asc
+        echo "deb [signed-by=/etc/apt/keyrings/zabbly.asc] https://pkgs.zabbly.com/incus/stable $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/zabbly-incus.list
+        sudo apt-get update
+        sudo apt-get install -y incus
+
+    - name: Initialise Incus
+      run: |
+        # Stop docker to avoid iptables/nftables conflicts with Incus bridges
+        sudo systemctl stop docker.socket docker || true
+        sudo iptables -P FORWARD ACCEPT
+        sudo sysctl -w fs.inotify.max_user_instances=65535
+        sudo sysctl -w fs.inotify.max_user_watches=65535
+        sudo incus admin init --auto
+        # Allow runner to access Incus without 'sg' or 'sudo'
+        sudo chmod 666 /var/lib/incus/unix.socket
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+
+    - name: Install cmlxc
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ./cmlxc
+        pip install pytest ruff
+
+    - name: Cache Incus images
+      id: cache-images
+      uses: actions/cache@v4
+      with:
+        path: |
+          /tmp/incus-cache
+        key: incus-images-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/incus.py') }}
+        restore-keys: |
+          incus-images-${{ runner.os }}-
+
+    - name: Import cached images
+      run: |
+        mkdir -p /tmp/incus-cache
+        for alias in localchat-base localchat-builder localchat-relay; do
+          if [ -f /tmp/incus-cache/$alias.tar.gz ]; then
+            echo "Importing cached image: $alias"
+            incus image import /tmp/incus-cache/$alias.tar.gz --alias $alias || true
+          fi
+        done
+
+    - name: Run linting
+      working-directory: cmlxc
+      run: ruff check src/ tests/
+
+    - name: Run unit tests
+      working-directory: cmlxc
+      run: pytest tests/test_incus.py -v
+
+    - name: Run fullrun tests
+      run: pytest cmlxc/tests/fullrun.py -v -x -s
+
+    - name: Export images for cache
+      if: always()
+      run: |
+        mkdir -p /tmp/incus-cache
+        # Export the builder as a reusable image if it's running
+        if incus list -c n --format csv | grep -q builder-localchat; then
+          echo "Publishing builder container as image ..."
+          incus publish builder-localchat --alias localchat-builder --force || true
+        fi
+        for alias in localchat-base localchat-builder localchat-relay; do
+          if incus image list --format csv -c l | grep -q "^$alias$"; then
+            echo "Exporting image for cache: $alias"
+            incus image export $alias /tmp/incus-cache/$alias || true
+            mv /tmp/incus-cache/$alias /tmp/incus-cache/$alias.tar.gz || true
+          fi
+        done
+
+    - name: Show container logs on failure
+      if: failure()
+      run: |
+        for c in $(incus list -c n --format csv); do
+          echo "::group::Logs for $c"
+          incus exec "$c" -- journalctl -p warning --no-pager -n 100 || true
+          echo "::endgroup::"
+        done

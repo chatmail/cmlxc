@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68", "setuptools-git-versioning >=2.0,<3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cmlxc"
+description = "Local LXC/Incus container management for chatmail relay development and testing"
+readme = "README.md"
+requires-python = ">= 3.10"
+license = {text = "MPL-2.0"}
+dependencies = [
+  "termcolor>=2.4.0",
+  "xdg-base-dirs>=6.0.2",
+  "argcomplete>=3.0.0",
+]
+dynamic = ["version"]
+
+[tool.setuptools-git-versioning]
+enabled = true
+
+[project.urls]
+Repository = "https://github.com/chatmail/cmlxc"
+
+[project.scripts]
+cmlxc = "cmlxc.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true
+
+[tool.pytest.ini_options]
+addopts = "-v -ra --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+lint.select = [
+  "F", # Pyflakes
+  "I", # isort
+
+  "PLC", # Pylint Convention
+  "PLE", # Pylint Error
+  "PLW", # Pylint Warning
+]
+
+[tool.tox]
+env_list = ["lint", "tests"]
+
+[tool.tox.env.lint]
+deps = ["ruff"]
+commands = [
+    ["ruff", "check", "src/", "tests/"],
+    ["ruff", "format", "--check", "src/", "tests/"],
+]
+
+[tool.tox.env.tests]
+deps = ["pytest"]
+commands = [
+    ["pytest", "tests/test_incus.py", "-v"],
+]
