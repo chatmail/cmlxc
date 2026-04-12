@@ -83,7 +83,7 @@ jobs:
       run: pytest tests/fullrun.py
 
     - name: Export images for cache
-      if: always()
+      if: always() && steps.cache-images.outputs.cache-hit != 'true'
       run: |
         mkdir -p /tmp/incus-cache
         # Export the builder as a reusable image if it's running

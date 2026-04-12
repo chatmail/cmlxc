@@ -681,9 +681,11 @@ class ContainerBuilder(Container):
             out.print(f"  Syncing {name} from {local_path} ...")
             self.sync_to(local_path, dest)
         else:
-            out.print(f"  Cloning {name} repository ...")
-            self.bash(f"rm -rf {dest}")
-            self.bash(f"git clone --depth=1 {url} {dest}")
+            if self.bash(f"test -d {dest}", check=False) is not None:
+                out.print(f"  {name} repository already exists.")
+            else:
+                out.print(f"  Cloning {name} repository ...")
+                self.bash(f"git clone --depth=1 {url} {dest}")
         self.bash(f"git config --global --add safe.directory {dest}")
 
     def install_relay_deps(self):
