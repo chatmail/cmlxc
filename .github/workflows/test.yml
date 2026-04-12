@@ -56,9 +56,9 @@ jobs:
       with:
         path: |
           /tmp/incus-cache
-        key: incus-images-v4-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/incus.py', 'cmlxc/src/cmlxc/driver_cmdeploy.py') }}
+        key: incus-images-v5-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/incus.py', 'cmlxc/src/cmlxc/driver_cmdeploy.py') }}
         restore-keys: |
-          incus-images-v4-${{ runner.os }}-
+          incus-images-v5-${{ runner.os }}-
 
     - name: Import cached images
       run: |

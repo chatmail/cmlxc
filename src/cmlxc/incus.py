@@ -285,7 +285,7 @@ class Incus:
             apt-get -o DPkg::Lock::Timeout=60 update
             DEBIAN_FRONTEND=noninteractive apt-get purge -y unattended-upgrades
             DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                openssh-server python3 build-essential python3-dev
+                openssh-server python3 gcc python3-dev
             systemctl enable ssh
             apt-get clean
             mkdir -p /root/.ssh
@@ -636,7 +636,7 @@ class ContainerBuilder(Container):
         self.bash("""
             apt-get -o DPkg::Lock::Timeout=60 update
             DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                python3-venv git build-essential python3-dev rsync
+                python3-venv git gcc make python3-dev rsync
             python3 -m venv /root/minitest-venv
             /root/minitest-venv/bin/pip install \\
                 pytest \\
