@@ -54,8 +54,9 @@ def _is_fullrun(config):
 
 
 def pytest_configure(config):
-    """Enable ``-xv`` when running fullrun tests."""
     if _is_fullrun(config):
+        sys.stdout.reconfigure(line_buffering=True)
+        sys.stderr.reconfigure(line_buffering=True)
         config.option.exitfirst = True
         config.option.verbose = max(config.option.verbose, 1)
 

@@ -80,8 +80,6 @@ jobs:
 
     - name: Run fullrun tests
       working-directory: cmlxc
-      env:
-        PYTHONUNBUFFERED: "1"
       run: pytest tests/fullrun.py
 
     - name: Export images for cache
