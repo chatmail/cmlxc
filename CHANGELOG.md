@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.4] - 2026-04-12
+
+### Fixes
+
+- add skip-existing to PyPI publish to tolerate re-tagged releases.
+
+### Miscellaneous Tasks
+
+- slightly better phrasing for "cmdeploy" relays.
+
 ## [0.6.3] - 2026-04-12
 
 ### Features / Changes
@@ -37,5 +47,6 @@
 
 - initial commit of cmlxc tool.
 
+[0.6.4]: https://github.com/chatmail/cmlxc/compare/v0.6.3..v0.6.4
 [0.6.3]: https://github.com/chatmail/cmlxc/compare/v0.5.0..v0.6.3
 
