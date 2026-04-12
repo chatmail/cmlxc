@@ -56,9 +56,9 @@ jobs:
       with:
         path: |
           /tmp/incus-cache
-        key: incus-images-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/incus.py') }}
+        key: incus-images-v4-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/incus.py', 'cmlxc/src/cmlxc/driver_cmdeploy.py') }}
         restore-keys: |
-          incus-images-${{ runner.os }}-
+          incus-images-v4-${{ runner.os }}-
 
     - name: Import cached images
       run: |
@@ -97,7 +97,10 @@ jobs:
           if incus image list --format csv -c l | grep -q "^$alias$"; then
             echo "Exporting image for cache: $alias"
             incus image export $alias /tmp/incus-cache/$alias || true
-            mv /tmp/incus-cache/$alias /tmp/incus-cache/$alias.tar.gz || true
+            # incus may append .tar.gz itself; ensure consistent name
+            if [ -f /tmp/incus-cache/$alias ] && [ ! -f /tmp/incus-cache/$alias.tar.gz ]; then
+              mv /tmp/incus-cache/$alias /tmp/incus-cache/$alias.tar.gz
+            fi
           fi
         done
 

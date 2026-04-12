@@ -470,6 +470,23 @@ def test_cmdeploy_cmd(args, out):
             pytest_args.extend(["--override-ini", "filterwarnings="])
             env["CHATMAIL_DOMAIN2"] = second_relay
 
+        # Verify cross-relay DNS before running tests
+        if len(relays) > 1:
+            for ct in relays:
+                for other in relays:
+                    if ct is other:
+                        continue
+                    mx = ct.bash(
+                        f"dig {other.domain} MX +short",
+                        check=False,
+                    )
+                    if not mx or not mx.strip():
+                        out.red(
+                            f"DNS check failed: {ct.name} cannot"
+                            f" resolve MX for {other.domain}"
+                        )
+                        return 1
+
         out.print(f"Running cmdeploy tests against {first_ct.domain} ...")
 
         ret = bld_ct.run_cmdeploy_tests(pytest_args, out, env=env)

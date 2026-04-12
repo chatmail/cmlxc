@@ -18,13 +18,15 @@ def init_builder(bld_ct, out, local_repo=None):
     bld_ct.setup_repo("/root/madmail", out, url=MADMAIL_REPO_URL, local_path=local_repo)
 
 
-def build_madmail(builder_ct):
+def build_madmail(builder_ct, out):
     """Build the maddy binary inside the builder."""
+    out.print("Installing build dependencies ...")
     builder_ct.bash("""
         apt-get -o DPkg::Lock::Timeout=60 update
         DEBIAN_FRONTEND=noninteractive apt-get install -y curl
     """)
     # Install Go from upstream, version parsed from go.mod.
+    out.print("Installing Go toolchain ...")
     builder_ct.bash("""
         NEED=$(awk '/^go / {print $2}' /root/madmail/go.mod)
         ARCH=$(dpkg --print-architecture)
@@ -39,7 +41,12 @@ def build_madmail(builder_ct):
         ln -sf /usr/local/go/bin/go /usr/local/bin/go
         ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt
     """)
-    builder_ct.bash("cd /root/madmail && make build")
+    out.print("Compiling maddy (make build) ...")
+    ret = out.shell(
+        f"incus exec {builder_ct.name} -- bash -c 'cd /root/madmail && make build'"
+    )
+    if ret:
+        raise RuntimeError(f"maddy build failed (exit {ret})")
 
 
 def deploy(relay_names, ix, out, builder_ct):
@@ -56,7 +63,7 @@ def deploy(relay_names, ix, out, builder_ct):
     ix.write_ssh_config()
 
     with out.section("Building maddy binary"):
-        build_madmail(builder_ct)
+        build_madmail(builder_ct, out)
 
     # Set up SSH from builder to relay containers
     builder_ct.setup_ssh(relays)

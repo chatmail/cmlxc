@@ -120,7 +120,8 @@ def deploy(relay_names, ix, out, builder_ct):
                 out.red(f"Deploy to {ct.sname} failed (exit {ret})")
                 return ret
 
-            # cmdeploy may overwrite unbound config; force re-inject .localchat forwarding
+            # cmdeploy appends 9.9.9.9 to resolv.conf; restore clean state
+            out.print(f"Re-configuring DNS in {ct.name} ...")
             ct.configure_dns(dns_ct.ipv4)
 
         if not ix.find_image([RELAY_IMAGE_ALIAS]):

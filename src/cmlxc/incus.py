@@ -532,15 +532,35 @@ class RelayContainer(Container):
             """,
         )
 
+    # Services that must not auto-start from a cached image because
+    # they would use stale DNS or network configuration.
+    _CACHED_DISABLE_SERVICES = [
+        "postfix",
+        "dovecot",
+        "unbound",
+        "opendkim",
+        "nginx",
+        "filtermail",
+        "filtermail-incoming",
+        "fcgiwrap",
+    ]
+
     def publish_as_relay_image(self):
         if self.incus.find_image([RELAY_IMAGE_ALIAS]):
             return
         self.out.print(
             f"  Locally caching {self.name!r} as '{RELAY_IMAGE_ALIAS}' image ..."
         )
+        units = " ".join(f"{s}.service" for s in self._CACHED_DISABLE_SERVICES)
+        self.bash("cp /etc/resolv.conf /tmp/resolv.conf.bak")
+        self.bash(f"systemctl disable --now {units}")
+        self.bash("rm -f /etc/resolv.conf")
         self.incus.run(
             ["publish", self.name, f"--alias={RELAY_IMAGE_ALIAS}", "--force"]
         )
+        # Restore DNS and re-enable services on the running container
+        self.bash("cp /tmp/resolv.conf.bak /etc/resolv.conf")
+        self.bash(f"systemctl enable --now {units}")
         self.wait_ready()
         self.out.print(f"  Relay image '{RELAY_IMAGE_ALIAS}' ready.")
 
@@ -577,14 +597,13 @@ class RelayContainer(Container):
               forward-addr: {dns_ip}
             """,
         )
-        self.bash("systemctl restart unbound 2>/dev/null || true")
+        self.bash("systemctl restart unbound || true")
         self._wait_dns_reachable(dns_ip)
 
     def _wait_dns_reachable(self, dns_ip, timeout=10):
         if self.bash("which dig", check=False) is None:
             self.bash(
-                "DEBIAN_FRONTEND=noninteractive "
-                "apt-get install -y dnsutils 2>/dev/null || true"
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y dnsutils 2>/dev/null"
             )
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -768,7 +787,7 @@ class DNSContainer(Container):
     def restart_services(self):
         self.bash("""
             systemctl restart pdns
-            systemctl restart pdns-recursor || true
+            systemctl restart pdns-recursor
         """)
         self._wait_dns_ready()
 
