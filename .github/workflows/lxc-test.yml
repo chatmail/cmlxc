@@ -90,7 +90,7 @@ jobs:
           done
 
       - name: Export images for cache
-        if: always()
+        if: always() && steps.cache-images.outputs.cache-hit != 'true'
         run: |
           mkdir -p /tmp/incus-cache
           if incus list -c n --format csv | grep -q builder-localchat; then
