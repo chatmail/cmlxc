@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.7] - 2026-04-12
+
+### CI
+
+- skip image export on cache hit in lxc-test.
+
+### Other
+
+- reorder README.
+
 ## [0.6.6] - 2026-04-12
 
 ### Fixes
@@ -57,6 +67,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.6.7]: https://github.com/chatmail/cmlxc/compare/v0.6.6..v0.6.7
 [0.6.6]: https://github.com/chatmail/cmlxc/compare/v0.6.4..v0.6.6
 [0.6.4]: https://github.com/chatmail/cmlxc/compare/v0.6.3..v0.6.4
 [0.6.3]: https://github.com/chatmail/cmlxc/compare/v0.5.0..v0.6.3

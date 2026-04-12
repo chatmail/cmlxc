@@ -10,74 +10,6 @@ and runs integration tests --
 all without touching the host system.
 
 
-## Architecture
-
-`cmlxc` manages four kinds of containers, each with a distinct role:
-
-```
-    cmlxc init / deploy-* / test-*
-        |
-        v
-   +-----------------+   +------------------------+   +--------------------+
-   | ns-localchat    |   | builder-localchat      |   | relay containers   |
-   | (PowerDNS)      |   | (repos, venvs, builds) |   | (cm0, mad1, ...)   |
-   +-----------------+   +------------------------+   +--------------------+
-           ^                        |                           ^
-           |      DNS zones         |        SSH / SCP          |
-           +------------------------+---------------------------+
-```
-
-**Base image** (`localchat-base`) --
-A Debian 12 image with SSH and Python pre-installed.
-All other containers are launched from this image
-(or from a cached relay image).
-
-**DNS container** (`ns-localchat`) --
-Runs PowerDNS authoritative + recursor.
-Provides `.localchat` DNS resolution
-so containers can reach each other by name.
-
-**Builder container** (`builder-localchat`) --
-The central workhorse.
-Holds repository checkouts (`/root/relay`, `/root/madmail`),
-Python virtualenvs for `cmdeploy` and mini-tests,
-and the compiled `maddy` binary.
-All deployment and test operations
-are executed *inside* the builder --
-the host only needs `cmlxc` itself.
-
-**Relay containers** (e.g. `cm0-localchat`, `mad1-localchat`) --
-Ephemeral containers that receive a deployed chatmail service.
-Each relay is locked to a single deployment driver
-(`cmdeploy` or `madmail`);
-switching requires destroying and re-creating the container.
-
-
-### Deployment drivers
-
-Drivers live in `driver_cmdeploy.py` and `driver_madmail.py`.
-Each driver has an `init_builder()` function
-(called during `cmlxc init`)
-and a `deploy()` function
-(called during `cmlxc deploy-*`).
-
-- **cmdeploy** --
-  Runs `cmdeploy run` from the builder container
-  over SSH into the relay.
-  Generates DNS zones, loads them into PowerDNS,
-  and verifies records.
-  After the first successful deploy
-  the relay image is cached as `localchat-relay`
-  so subsequent containers start pre-populated.
-
-- **madmail** --
-  Builds the `maddy` Go binary on first deploy
-  (the triggered `make` is idempotent on reruns),
-  then pushes it via SCP
-  and runs `madmail install --simple --ip <IP>`.
-  No DNS entries are needed.
-
-
 ## Prerequisites
 
 [Incus](https://linuxcontainers.org/incus/)
@@ -92,13 +24,13 @@ With pip:
 
     python -m venv venv
     source venv/bin/activate
-    pip install .
+    pip install cmlxc
 
 Or with [uv](https://docs.astral.sh/uv/):
 
     uv venv venv
     source venv/bin/activate
-    uv pip install .
+    uv pip install cmlxc
 
 ## Usage
 
@@ -172,6 +104,75 @@ Enable **permanently**:
 ```bash
 activate-global-python-argcomplete --user
 ```
+
+
+## Architecture
+
+`cmlxc` manages four kinds of containers, each with a distinct role:
+
+```
+    cmlxc init / deploy-* / test-*
+        |
+        v
+   +-----------------+   +------------------------+   +--------------------+
+   | ns-localchat    |   | builder-localchat      |   | relay containers   |
+   | (PowerDNS)      |   | (repos, venvs, builds) |   | (cm0, mad1, ...)   |
+   +-----------------+   +------------------------+   +--------------------+
+           ^                        |                           ^
+           |      DNS zones         |        SSH / SCP          |
+           +------------------------+---------------------------+
+```
+
+**Base image** (`localchat-base`) --
+A Debian 12 image with SSH and Python pre-installed.
+All other containers are launched from this image
+(or from a cached relay image).
+
+**DNS container** (`ns-localchat`) --
+Runs PowerDNS authoritative + recursor.
+Provides `.localchat` DNS resolution
+so containers can reach each other by name.
+
+**Builder container** (`builder-localchat`) --
+The central workhorse.
+Holds repository checkouts (`/root/relay`, `/root/madmail`),
+Python virtualenvs for `cmdeploy` and mini-tests,
+and the compiled `maddy` binary.
+All deployment and test operations
+are executed *inside* the builder --
+the host only needs `cmlxc` itself.
+
+**Relay containers** (e.g. `cm0-localchat`, `mad1-localchat`) --
+Ephemeral containers that receive a deployed chatmail service.
+Each relay is locked to a single deployment driver
+(`cmdeploy` or `madmail`);
+switching requires destroying and re-creating the container.
+
+
+### Deployment drivers
+
+Drivers live in `driver_cmdeploy.py` and `driver_madmail.py`.
+Each driver has an `init_builder()` function
+(called during `cmlxc init`)
+and a `deploy()` function
+(called during `cmlxc deploy-*`).
+
+- **cmdeploy** --
+  Runs `cmdeploy run` from the builder container
+  over SSH into the relay.
+  Generates DNS zones, loads them into PowerDNS,
+  and verifies records.
+  After the first successful deploy
+  the relay image is cached as `localchat-relay`
+  so subsequent containers start pre-populated.
+
+- **madmail** --
+  Builds the `maddy` Go binary on first deploy
+  (the triggered `make` is idempotent on reruns),
+  then pushes it via SCP
+  and runs `madmail install --simple --ip <IP>`.
+  No DNS entries are needed.
+
 
 
 ## Releasing
