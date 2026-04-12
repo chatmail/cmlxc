@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.6] - 2026-04-12
+
+### Fixes
+
+- gate release on test suite, add skip-existing to PyPI publish.
+
+### Miscellaneous Tasks
+
+- upgrade action dependencies for Node 24.
+
 ## [0.6.4] - 2026-04-12
 
 ### Fixes
@@ -47,6 +57,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.6.6]: https://github.com/chatmail/cmlxc/compare/v0.6.4..v0.6.6
 [0.6.4]: https://github.com/chatmail/cmlxc/compare/v0.6.3..v0.6.4
 [0.6.3]: https://github.com/chatmail/cmlxc/compare/v0.5.0..v0.6.3
 
