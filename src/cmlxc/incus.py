@@ -487,7 +487,12 @@ class RelayContainer(Container):
         cfg += ("-c", f"{LABEL_KEY}=true")
         cfg += ("-c", f"{LABEL_DOMAIN}={self.domain}")
         self.incus.run(["launch", image, self.name, *cfg])
-        self.bash("""
+        # Re-inject the current SSH key; cached images may have a stale one.
+        pub_key = self.incus.ssh_key_path.with_suffix(".pub").read_text().strip()
+        self.bash(f"""
+            mkdir -p /root/.ssh && chmod 700 /root/.ssh
+            echo '{pub_key}' > /root/.ssh/authorized_keys
+            chmod 600 /root/.ssh/authorized_keys
             rm -f /etc/chatmail-version
             rm -f /etc/sysctl.d/99-disable-ipv6.conf
             sysctl -w net.ipv6.conf.all.disable_ipv6=0 2>/dev/null || true
