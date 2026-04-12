@@ -1,5 +1,9 @@
 name: LXC deploy and test
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-lxc
+  cancel-in-progress: false
+
 on:
   workflow_call:
     inputs:
