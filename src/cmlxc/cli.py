@@ -279,7 +279,7 @@ def deploy_cmdeploy_cmd_options(parser):
 
 
 def deploy_cmdeploy_cmd(args, out):
-    """Deploy a relay into a container using cmdeploy."""
+    """Deploy a cmdeploy relay into a container."""
     ix = Incus(out)
     if not _check_init(ix, out):
         return 1
