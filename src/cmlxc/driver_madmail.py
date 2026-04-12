@@ -14,20 +14,13 @@ MADMAIL_REPO_URL = "https://github.com/themadorg/madmail.git"
 
 
 def init_builder(bld_ct, out, local_repo=None):
-    """Set up the madmail checkout in the builder."""
+    """Set up the madmail checkout and Go toolchain in the builder."""
     bld_ct.setup_repo("/root/madmail", out, url=MADMAIL_REPO_URL, local_path=local_repo)
-
-
-def build_madmail(builder_ct, out):
-    """Build the maddy binary inside the builder."""
-    out.print("Installing build dependencies ...")
-    builder_ct.bash("""
-        apt-get -o DPkg::Lock::Timeout=60 update
-        DEBIAN_FRONTEND=noninteractive apt-get install -y curl
+    bld_ct.bash("""
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl
     """)
     # Install Go from upstream, version parsed from go.mod.
-    out.print("Installing Go toolchain ...")
-    builder_ct.bash("""
+    bld_ct.bash("""
         NEED=$(awk '/^go / {print $2}' /root/madmail/go.mod)
         ARCH=$(dpkg --print-architecture)
         case "$ARCH" in
@@ -35,12 +28,20 @@ def build_madmail(builder_ct, out):
             arm64) GOARCH=arm64 ;;
             *) echo "unsupported arch: $ARCH" >&2; exit 1 ;;
         esac
+        if [ -x /usr/local/go/bin/go ]; then
+            HAVE=$(/usr/local/go/bin/go version | awk '{print $3}' | sed 's/^go//')
+            [ "$HAVE" = "$NEED" ] && exit 0
+        fi
         URL="https://go.dev/dl/go${NEED}.linux-${GOARCH}.tar.gz"
         echo "Installing Go ${NEED} from ${URL} ..."
         curl -fsSL "$URL" | tar -C /usr/local -xzf -
         ln -sf /usr/local/go/bin/go /usr/local/bin/go
         ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt
     """)
+
+
+def build_madmail(builder_ct, out):
+    """Compile the maddy binary inside the builder."""
     out.print("Compiling maddy (make build) ...")
     ret = out.shell(
         f"incus exec {builder_ct.name} -- bash -c 'cd /root/madmail && make build'"
