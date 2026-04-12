@@ -82,8 +82,8 @@ and a `deploy()` function
 
 [Incus](https://linuxcontainers.org/incus/)
 installed and configured on the host.
-Usually only being part of the "incus" group is neccessary,
-as containers can run with user priviledges.
+Usually only being part of the "incus" group is necessary,
+as containers can run with user privileges.
 
 
 ## Installation
@@ -103,14 +103,28 @@ Or with [uv](https://docs.astral.sh/uv/):
 ## Usage
 
 **Initialize the environment**
-(base image, DNS container, builder container):
+(base image, DNS container, builder container).
+At least one of `--cmdeploy` or `--madmail` is required:
 
-    cmlxc init
+    cmlxc init --cmdeploy @main
+    cmlxc init --madmail @main
+    cmlxc init --cmdeploy @main --madmail @main
 
-Use `--relay-repo` or `--madmail-repo`
-to sync a local checkout instead of cloning from GitHub:
+The `SOURCE` argument controls where the code comes from:
 
-    cmlxc init --relay-repo ../relay --madmail-repo ../madmail
+| Form | Meaning |
+|------|---------|
+| `@ref` | Clone default remote at branch/tag `ref` |
+| `/path` or `./path` | Sync from a local checkout |
+| `URL@ref` | Clone a custom remote at `ref` |
+
+Examples with local checkouts or feature branches:
+
+    cmlxc init --cmdeploy ../relay --madmail @lmtp-rework
+    cmlxc init --cmdeploy @fix-dovecot
+
+Running `init` again wipes and re-clones the repositories
+in the builder.
 
 **Deploy chatmail relays**
 (creates containers if needed, then deploys):

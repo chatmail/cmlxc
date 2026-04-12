@@ -5,7 +5,9 @@ Standard workflow: init -> deploy-cmdeploy/deploy-madmail -> test-cmdeploy/test-
 
 import argparse
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import argcomplete
 
@@ -23,6 +25,36 @@ from cmlxc.incus import (
     _is_ip_address,
 )
 from cmlxc.output import Out
+
+
+@dataclass
+class SourceSpec:
+    """Parsed SOURCE argument for init --cmdeploy / --madmail."""
+
+    kind: Literal["remote", "local"]
+    url: str | None = None
+    ref: str | None = None
+    path: Path | None = None
+
+
+def parse_source(value: str, default_url: str) -> SourceSpec:
+    """Turn a SOURCE string into a typed spec.
+
+    Accepted forms:
+      @ref           -- branch/tag on the default remote
+      /path or ./path -- local directory
+      URL@ref        -- custom remote at a given ref
+    """
+    if value.startswith(("/", ".")):
+        return SourceSpec("local", path=Path(value))
+    if value.startswith("@"):
+        return SourceSpec("remote", url=default_url, ref=value[1:])
+    if "://" in value:
+        url, _, ref = value.rpartition("@")
+        if not url:
+            raise ValueError(f"Invalid SOURCE: {value!r}")
+        return SourceSpec("remote", url=url, ref=ref)
+    raise ValueError(f"Invalid SOURCE: {value!r}. Use @ref, /path, ./path, or URL@ref.")
 
 
 def _container_completer(prefix, **kwargs):
@@ -80,21 +112,27 @@ def _destroy_relays(ix, out):
 
 def init_cmd_options(parser):
     parser.add_argument(
-        "--relay-repo",
-        dest="relay_repo",
-        help="Path to a local relay checkout to sync into the builder "
-        "(instead of cloning from GitHub).",
+        "--cmdeploy",
+        dest="cmdeploy_source",
+        default=None,
+        metavar="SOURCE",
+        help="Prepare cmdeploy driver. SOURCE: @ref, /path, ./path, or URL@ref.",
     )
     parser.add_argument(
-        "--madmail-repo",
-        dest="madmail_repo",
-        help="Path to a local madmail checkout to sync into the builder "
-        "(instead of cloning from GitHub).",
+        "--madmail",
+        dest="madmail_source",
+        default=None,
+        metavar="SOURCE",
+        help="Prepare madmail driver. SOURCE: @ref, /path, ./path, or URL@ref.",
     )
 
 
 def init_cmd(args, out):
     """Initialize the environment (base image, DNS, builder container)."""
+    if not args.cmdeploy_source and not args.madmail_source:
+        out.red("Error: specify --cmdeploy SOURCE and/or --madmail SOURCE.")
+        return 1
+
     ix = Incus(out)
     with out.section("Initializing cmlxc environment"):
         out.green(f"Ensuring {BASE_IMAGE_ALIAS} image ...")
@@ -118,9 +156,19 @@ def init_cmd(args, out):
         test_dir = Path(__file__).parents[1] / "relay_minitest"
         bld_ct.sync_mini_tests(test_dir)
 
-        driver_cmdeploy.init_builder(bld_ct, out, local_repo=args.relay_repo)
+        if args.cmdeploy_source:
+            cm_src = parse_source(
+                args.cmdeploy_source,
+                driver_cmdeploy.RELAY_REPO_URL,
+            )
+            driver_cmdeploy.init_builder(bld_ct, out, source=cm_src)
 
-        driver_madmail.init_builder(bld_ct, out, local_repo=args.madmail_repo)
+        if args.madmail_source:
+            mm_src = parse_source(
+                args.madmail_source,
+                driver_madmail.MADMAIL_REPO_URL,
+            )
+            driver_madmail.init_builder(bld_ct, out, source=mm_src)
 
         out.green(f"{BUILDER_CONTAINER_NAME} container ready.")
 

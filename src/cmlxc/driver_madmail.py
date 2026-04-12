@@ -13,9 +13,9 @@ from cmlxc.incus import MADMAIL
 MADMAIL_REPO_URL = "https://github.com/themadorg/madmail.git"
 
 
-def init_builder(bld_ct, out, local_repo=None):
+def init_builder(bld_ct, out, source):
     """Set up the madmail checkout and Go toolchain in the builder."""
-    bld_ct.setup_repo("/root/madmail", out, url=MADMAIL_REPO_URL, local_path=local_repo)
+    bld_ct.setup_repo("/root/madmail", out, source)
     bld_ct.bash("""
         DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl
     """)

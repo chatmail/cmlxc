@@ -15,9 +15,9 @@ from cmlxc.incus import (
 RELAY_REPO_URL = "https://github.com/chatmail/relay.git"
 
 
-def init_builder(bld_ct, out, local_repo=None):
+def init_builder(bld_ct, out, source):
     """Set up the relay checkout and install cmdeploy deps."""
-    bld_ct.setup_repo("/root/relay", out, url=RELAY_REPO_URL, local_path=local_repo)
+    bld_ct.setup_repo("/root/relay", out, source)
     out.print("  Installing cmdeploy/chatmaild (editable) ...")
     bld_ct.install_relay_deps()
 

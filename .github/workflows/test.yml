@@ -76,7 +76,7 @@ jobs:
 
     - name: Run unit tests
       working-directory: cmlxc
-      run: pytest tests/test_incus.py -v
+      run: pytest tests/test_incus.py tests/test_cli.py -v
 
     - name: Run fullrun tests
       working-directory: cmlxc

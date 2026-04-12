@@ -675,17 +675,15 @@ class ContainerBuilder(Container):
                 f"Error: {res.stderr.strip()}"
             )
 
-    def setup_repo(self, dest, out, url=None, local_path=None):
+    def setup_repo(self, dest, out, source):
         name = dest.rsplit("/", 1)[-1]
-        if local_path:
-            out.print(f"  Syncing {name} from {local_path} ...")
-            self.sync_to(local_path, dest)
+        self.bash(f"rm -rf {dest}")
+        if source.kind == "local":
+            out.print(f"  Syncing {name} from {source.path} ...")
+            self.sync_to(source.path, dest)
         else:
-            if self.bash(f"test -d {dest}", check=False) is not None:
-                out.print(f"  {name} repository already exists.")
-            else:
-                out.print(f"  Cloning {name} repository ...")
-                self.bash(f"git clone --depth=1 {url} {dest}")
+            out.print(f"  Cloning {name} ({source.ref}) ...")
+            self.bash(f"git clone --depth=1 -b {source.ref} {source.url} {dest}")
         self.bash(f"git config --global --add safe.directory {dest}")
 
     def install_relay_deps(self):
