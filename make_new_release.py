@@ -56,10 +56,30 @@ def bump_version(current, part):
 
 
 def main():
+    # 1. Check if we are on main branch
+    branch = run(["git", "branch", "--show-current"], capture=True)
+    if branch != "main":
+        print(f"Error: Not on branch 'main' (currently on {branch!r}).")
+        sys.exit(1)
+
+    # 2. Check for uncommitted changes
     if run(["git", "diff", "--quiet"]) != 0:
         print("Error: Uncommitted changes in the repository.")
         print("Please commit or stash them before releasing.")
         sys.exit(1)
+
+    # 3. Check if in sync with origin/main
+    print("--- Checking sync with origin/main ---")
+    run(["git", "fetch", "origin"])
+    try:
+        remote_head = run(["git", "rev-parse", "origin/main"], capture=True)
+        local_head = run(["git", "rev-parse", "HEAD"], capture=True)
+        if remote_head != local_head:
+            print("Error: Local branch 'main' is not in sync with 'origin/main'.")
+            print("Please pull/push before releasing.")
+            sys.exit(1)
+    except subprocess.CalledProcessError:
+        print("Warning: Could not find origin/main, skipping sync check.")
 
     print("--- Running tests with tox ---")
     if run(["tox"]) != 0:
