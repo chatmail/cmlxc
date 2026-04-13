@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.7.0] - 2026-04-13
+
+### Documentation
+
+- reformat README and add release automation script.
+
+### Features / Changes
+
+- better per-relay status, and generally more exact references in the output.
+- remove all per-container state, and put it into the build container instead.
+- move host setup instructions behind 'status --host', revise output.
+
+### Refactor
+
+- [**breaking**] cli: shift driver specific CLI handling to driver modules.
+
 ## [0.6.7] - 2026-04-12
 
 ### CI
@@ -67,6 +83,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.7.0]: https://github.com/chatmail/cmlxc/compare/v0.6.7..v0.7.0
 [0.6.7]: https://github.com/chatmail/cmlxc/compare/v0.6.6..v0.6.7
 [0.6.6]: https://github.com/chatmail/cmlxc/compare/v0.6.4..v0.6.6
 [0.6.4]: https://github.com/chatmail/cmlxc/compare/v0.6.3..v0.6.4
