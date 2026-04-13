@@ -23,13 +23,23 @@ class MadmailDriver(Driver):
     REPO_NAME = MADMAIL
     NAME_EXAMPLES = "mad0 mad1"
 
-    def init_builder(self, bld_ct, source, names):
-        """Set up the madmail template and copy for each relay."""
+    def prep_builder(self, bld_ct, source=None):
+        """Perform one-time global preparation (toolchains, default checkouts)."""
+        if source is None:
+            from cmlxc.driver_base import parse_source
+
+            source = parse_source("@main", self.DEFAULT_SOURCE_URL)
+
         tmp_dest = f"/root/{self.REPO_NAME}-template"
         bld_ct.setup_repo(tmp_dest, self.out, source)
 
         self.out.print("  Ensuring build environment (Go) ...")
         prepare_build_container(bld_ct, tmp_dest)
+
+    def init_builder(self, bld_ct, source, names):
+        """Set up the madmail template and copy for each relay."""
+        tmp_dest = f"/root/{self.REPO_NAME}-template"
+        self.prep_builder(bld_ct, source=source)
 
         with self.out.section("Building maddy binary (once for this source)"):
             self._build(bld_ct, tmp_dest)

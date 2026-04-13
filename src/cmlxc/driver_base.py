@@ -143,6 +143,10 @@ class Driver:
         """Prepare the builder container for this driver and these relays."""
         raise NotImplementedError
 
+    def prep_builder(self, bld_ct):
+        """Perform one-time global preparation (toolchains, default checkouts)."""
+        pass
+
     def run_deploy(self, names, bld_ct, *, source, ipv4_only):
         """Ensure relay containers and run the deployment."""
         raise NotImplementedError

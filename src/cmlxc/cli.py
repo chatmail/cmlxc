@@ -122,6 +122,11 @@ def init_cmd(args, out):
         test_dir = Path(__file__).parents[1] / "relay_minitest"
         bld_ct.sync_mini_tests(test_dir)
 
+        for drv_cls in DEPLOY_DRIVERS:
+            driver = drv_cls(ix, out)
+            with out.section(f"Preparing {driver.REPO_NAME} in builder"):
+                driver.prep_builder(bld_ct)
+
         out.green(f"{BUILDER_CONTAINER_NAME} container ready.")
 
 
@@ -527,13 +532,6 @@ def _print_builder_repos(out, ct):
             if status:
                 out.print(f"{name} template: {status}")
 
-        # Binary
-        has_binary = (
-            ct.bash("test -f /root/madmail-template/build/maddy", check=False)
-            is not None
-        )
-        if has_binary:
-            out.green("maddy: built")
     except Exception:
         out.print("repos: (unavailable)")
 

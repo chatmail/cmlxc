@@ -35,10 +35,23 @@ class CmdeployDriver(Driver):
         "fcgiwrap",
     ]
 
+    def prep_builder(self, bld_ct, source=None):
+        """Perform one-time global preparation (toolchains, default checkouts)."""
+        if source is None:
+            from cmlxc.driver_base import parse_source
+
+            source = parse_source("@main", self.DEFAULT_SOURCE_URL)
+
+        tmp_dest = f"/root/{self.REPO_NAME}-template"
+        bld_ct.setup_repo(tmp_dest, self.out, source)
+
+        self.out.print(f"  Installing cmdeploy/chatmaild in template venv ...")
+        prepare_build_container(bld_ct, tmp_dest, f"{tmp_dest}/venv")
+
     def init_builder(self, bld_ct, source, names):
         """Set up the cmdeploy checkout and install deps for each relay."""
         tmp_dest = f"/root/{self.REPO_NAME}-template"
-        bld_ct.setup_repo(tmp_dest, self.out, source)
+        self.prep_builder(bld_ct, source=source)
 
         for name in names:
             ct = self.ix.get_container(name)
@@ -47,9 +60,6 @@ class CmdeployDriver(Driver):
 
             self.out.print(f"  Setting up {repo_path} ...")
             bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
-
-            self.out.print(f"  Installing cmdeploy/chatmaild in {venv_path} ...")
-            prepare_build_container(bld_ct, repo_path, venv_path)
 
     def run_deploy(self, names, bld_ct, *, source, ipv4_only=False):
         """Ensure relay containers and deploy cmdeploy."""

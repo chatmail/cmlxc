@@ -14,6 +14,11 @@ See [Architecture](#architecture) for more internal details.
 Usually only being part of the "incus" group is necessary,
 as containers can run with user privileges.
 
+> [!TIP]
+> On Debian or Ubuntu, it is recommended to use the
+> [Zabbly Incus repository](https://github.com/zabbly/incus)
+> to ensure you have a recent version.
+
 You can verify your incus installation like this:
 
     incus launch images:debian/12 local-my-setup
