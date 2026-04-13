@@ -1,11 +1,26 @@
 # Changelog
 
+## [0.7.4] - 2026-04-13
+
+### Fixes
+
+- incus: make launching of base setup image more robust and force labeling.
+- doc: add note about possible incus failures.
+
+### Other
+
+- README: some fixes.
+
 ## [0.7.3] - 2026-04-13
 
 ### Features / Changes
 
 - cli: add --version option and show version in help string.
 - cli: show version at top of deploy and test command output.
+
+### Miscellaneous Tasks
+
+- release v0.7.3.
 
 ## [0.7.2] - 2026-04-13
 
@@ -112,6 +127,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.7.4]: https://github.com/chatmail/cmlxc/compare/v0.7.3..v0.7.4
 [0.7.3]: https://github.com/chatmail/cmlxc/compare/v0.7.2..v0.7.3
 [0.7.2]: https://github.com/chatmail/cmlxc/compare/v0.7.1..v0.7.2
 [0.7.1]: https://github.com/chatmail/cmlxc/compare/v0.7.0..v0.7.1
