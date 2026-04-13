@@ -33,6 +33,7 @@ LABEL_KEY = "user.localchat-managed"
 LABEL_DOMAIN = "user.localchat-domain"
 LABEL_DEPLOY_DRIVER = "user.localchat-deploy-driver"
 LABEL_DEPLOYED_AT = "user.localchat-deployed-at"
+LABEL_DEPLOY_SOURCE = "user.localchat-deploy-source"
 
 # SSH and Domain config
 SSH_KEY_NAME = "id_localchat"
@@ -459,21 +460,23 @@ class Container:
         return {
             "driver": driver,
             "timestamp": config.get(LABEL_DEPLOYED_AT, "Unknown"),
+            "source": config.get(LABEL_DEPLOY_SOURCE),
         }
 
-    def write_deploy_state(self, deploy_driver):
+    def write_deploy_state(self, deploy_driver, source_desc=None):
         """Record that a deployment of *deploy_driver* occurred."""
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        self.incus.run(
-            [
-                "config",
-                "set",
-                self.name,
-                f"{LABEL_DEPLOY_DRIVER}={deploy_driver}",
-                f"{LABEL_DEPLOYED_AT}={now}",
-            ]
-        )
-        return {"driver": deploy_driver, "timestamp": now}
+        cmd = [
+            "config",
+            "set",
+            self.name,
+            f"{LABEL_DEPLOY_DRIVER}={deploy_driver}",
+            f"{LABEL_DEPLOYED_AT}={now}",
+        ]
+        if source_desc:
+            cmd.append(f"{LABEL_DEPLOY_SOURCE}={source_desc}")
+        self.incus.run(cmd)
+        return {"driver": deploy_driver, "timestamp": now, "source": source_desc}
 
     def check_deploy_lock(self, deploy_driver):
         state = self.get_deploy_state()
@@ -491,6 +494,7 @@ class Container:
 
     def wait_ready(self, timeout=60, expect_ipv6=False):
         deadline = time.time() + timeout
+        last_msg_time = time.time()
         while time.time() < deadline:
             data = self.incus.run_json(
                 ["list", self.name],
@@ -502,10 +506,24 @@ class Container:
                 self.ipv6 = _extract_ip(net, "inet6")
                 if self.ipv4 and (not expect_ipv6 or self.ipv6):
                     return
+
+                if time.time() - last_msg_time > 5:
+                    msg = "Waiting for network..."
+                    if not self.ipv4:
+                        msg += " (no IPv4 yet)"
+                    elif expect_ipv6 and not self.ipv6:
+                        msg += " (IPv4 ready, waiting for IPv6)"
+                    self.out.print(f"  {msg}")
+                    last_msg_time = time.time()
+
             time.sleep(1)
-        raise TimeoutError(
-            f"Container {self.name!r} did not become ready within {timeout}s"
-        )
+
+        msg = f"Container {self.name!r} did not become ready within {timeout}s"
+        if not self.ipv4:
+            msg += " (No IPv4 address obtained)"
+        elif expect_ipv6 and not self.ipv6:
+            msg += " (Has IPv4, but NO IPv6 address obtained)"
+        raise TimeoutError(msg)
 
 
 class RelayContainer(Container):
@@ -571,7 +589,10 @@ class RelayContainer(Container):
         existing = [c for c in data if c["name"] == self.name]
         if existing:
             if existing[0]["status"] != "Running":
+                self.out.print(f"  Starting container {self.name!r} ...")
                 self.start()
+            if not ipv4_only:
+                self.enable_ipv6()
         else:
             self.launch(image_candidates=image_candidates)
         self.wait_ready(expect_ipv6=not ipv4_only)
@@ -598,6 +619,12 @@ class RelayContainer(Container):
             """,
         )
 
+    def enable_ipv6(self):
+        self.bash("""
+            rm -f /etc/sysctl.d/99-disable-ipv6.conf
+            sysctl -w net.ipv6.conf.all.disable_ipv6=0
+            sysctl -w net.ipv6.conf.default.disable_ipv6=0
+        """)
 
     def verify_ssh(self, ssh_config):
         cmd = ["ssh", "-F", str(ssh_config), "-o", "ConnectTimeout=60"]
@@ -730,6 +757,18 @@ class ContainerBuilder(Container):
                 -e {repo_path}/cmdeploy
         """)
 
+    def get_repo_status(self, repo_path):
+        """Return a one-line string describing the git repo at repo_path."""
+        if self.bash(f"test -d {repo_path}", check=False) is None:
+            return None
+        commit = self.bash(
+            f"cd {repo_path} && git log --oneline -1 --no-decorate",
+            check=False,
+        )
+        if commit:
+            return commit.strip()
+        return "synced from host"
+
     def sync_mini_tests(self, test_dir):
         self.sync_to(test_dir, "/root/minitest")
 
@@ -744,10 +783,8 @@ class ContainerBuilder(Container):
         )
         return out.shell(cmd)
 
-    def push_chatmail_ini(self, ini_path):
-        self.incus.run(
-            ["file", "push", str(ini_path), f"{self.name}/root/chatmail.ini"]
-        )
+    def push_chatmail_ini(self, ini_path, dest="/root/chatmail.ini"):
+        self.incus.run(["file", "push", str(ini_path), f"{self.name}{dest}"])
 
     def setup_ssh(self, relay_containers):
         key = self.incus.ssh_key_path
@@ -781,7 +818,8 @@ SSHEOF
         """)
 
     def run_cmdeploy_tests(self, repo_path, venv_path, pytest_args, out, env=None):
-        env_exports = "export CHATMAIL_INI=/root/chatmail.ini"
+        ini_path = f"{repo_path}/chatmail.ini"
+        env_exports = f"export CHATMAIL_INI={ini_path}"
         for k, v in (env or {}).items():
             env_exports += f" && export {k}={v}"
         args_str = " ".join(pytest_args)
@@ -957,9 +995,10 @@ class DNSContainer(Container):
             text = soa + ns + glue + text
 
         # Push content to container and load into PowerDNS
+        tmp_zone = f"/tmp/zonefile-{zone}"
         self.incus.run(
-            ["exec", self.name, "--", "bash", "-c", "cat > /tmp/zonefile"],
+            ["exec", self.name, "--", "bash", "-c", f"cat > {tmp_zone}"],
             input=text,
         )
-        self.pdnsutil("load-zone", zone, "/tmp/zonefile")
+        self.pdnsutil("load-zone", zone, tmp_zone)
         self.restart_services()

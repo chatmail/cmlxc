@@ -138,10 +138,7 @@ def _confirm_cmdeploy_deployed(ct, out):
         out.print("Run 'cmlxc deploy-cmdeploy <name>' first.")
         return False
     if driver != CMDEPLOY:
-        out.red(
-            f"Container {ct.sname!r} was deployed with"
-            f" {driver!r}, not cmdeploy."
-        )
+        out.red(f"Container {ct.sname!r} was deployed with {driver!r}, not cmdeploy.")
         out.print("cmdeploy-test only supports cmdeploy-deployed relays.")
         return False
     return True
@@ -293,7 +290,9 @@ def test_cmdeploy_cmd(args, out):
             bld_ct, first_ct, disable_ipv6=first_ct.is_ipv6_disabled
         )
 
-        bld_ct.push_chatmail_ini(first_ct.ini)
+        repo_path = first_ct.get_repo_path(driver_cmdeploy.CMDEPLOY)
+        ini_dest = f"{repo_path}/chatmail.ini"
+        bld_ct.push_chatmail_ini(first_ct.ini, ini_dest)
 
         relays = [ix.get_container(n) for n in relay_names]
         out.print("Setting up SSH access to relay containers ...")
@@ -493,6 +492,18 @@ def _print_container_status(out, c, ix):
     detail_out = out.new_prefixed_out(" " * 21)
     if isinstance(ct, RelayContainer):
         detail_out.print(f"config: {ct.relay_dir.resolve()}")
+        driver_name = ct.driver
+        if driver_name and is_running:
+            bld_ct = ix.get_container(BUILDER_CONTAINER_NAME)
+            if bld_ct.is_running:
+                repo_path = ct.get_repo_path(driver_name)
+                status = bld_ct.get_repo_status(repo_path)
+                if status:
+                    state = ct.get_deploy_state()
+                    source_ref = state.get("source") or "?"
+                    detail_out.print(f"source: {source_ref}")
+                    detail_out.print(f"        {status}")
+
     elif isinstance(ct, ContainerBuilder) and is_running:
         _print_builder_repos(detail_out, ct)
     out.print()
@@ -503,16 +514,9 @@ def _print_builder_repos(out, ct):
         # Templates
         for name in ["cmdeploy", "madmail"]:
             path = f"/root/{name}-template"
-            if ct.bash(f"test -d {path}", check=False) is None:
-                continue
-            commit = ct.bash(
-                f"cd {path} && git log --oneline -1 --no-decorate",
-                check=False,
-            )
-            if commit:
-                out.print(f"{name} template: {commit.strip()}")
-            else:
-                out.print(f"{name} template: synced from host")
+            status = ct.get_repo_status(path)
+            if status:
+                out.print(f"{name} template: {status}")
 
         # Binary
         has_binary = (

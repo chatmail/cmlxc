@@ -57,10 +57,10 @@ class MadmailDriver(Driver):
         for name in names:
             ct = self.ix.get_container(name)
             repo_path = ct.get_repo_path(self.REPO_NAME)
-            self.out.print(f"  Setting up {repo_path} ...")
+            self.out.print(f"  Setting up {repo_path} (from {source.description}) ...")
             bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
 
-    def run_deploy(self, names, bld_ct, *, ipv4_only=False):
+    def run_deploy(self, names, bld_ct, *, source, ipv4_only=False):
         """Ensure relay containers and deploy madmail."""
         with self.out.section("Preparing container setup"):
             self.ix.ensure_relay_containers(
@@ -69,12 +69,12 @@ class MadmailDriver(Driver):
                 image_candidates=None,
             )
         try:
-            return self.deploy(names, bld_ct)
+            return self.deploy(names, bld_ct, source=source)
         except DeployConflictError as exc:
             self.out.red(f"Deploy conflict: {exc}")
             return 1
 
-    def deploy(self, relay_names, builder_ct):
+    def deploy(self, relay_names, builder_ct, source=None):
         """Deploy madmail to relay containers."""
         t_total = time.time()
         out = self.out
@@ -88,7 +88,6 @@ class MadmailDriver(Driver):
             ct.check_deploy_lock(MADMAIL)
 
         ix.write_ssh_config()
-
 
         # Set up SSH from builder to relay containers
         builder_ct.setup_ssh(relays)
@@ -119,7 +118,8 @@ class MadmailDriver(Driver):
                 ct.bash("systemctl start madmail")
                 ct.bash("rm -f /tmp/madmail")
 
-                ct.write_deploy_state(MADMAIL)
+                desc = source.description if source else None
+                ct.write_deploy_state(MADMAIL, source_desc=desc)
                 out.green(f"madmail deployed to {ct.sname} ({ip})")
 
         elapsed = time.time() - t_total
