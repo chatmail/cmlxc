@@ -734,7 +734,7 @@ class ContainerBuilder(Container):
     def setup_repo(self, dest, out, source):
         name = dest.rsplit("/", 1)[-1]
         self.bash(f"rm -rf {dest}")
-        out.print(f"  Preparing {name} from {source.description} ...")
+        out.print(f"  Preparing {name} ...")
         if source.kind == "local":
             self.sync_to(source.path, dest)
         else:

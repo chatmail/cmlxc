@@ -57,7 +57,7 @@ class MadmailDriver(Driver):
         for name in names:
             ct = self.ix.get_container(name)
             repo_path = ct.get_repo_path(self.REPO_NAME)
-            self.out.print(f"  Setting up {repo_path} (from {source.description}) ...")
+            self.out.print(f"  Setting up {repo_path} ...")
             bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
 
     def run_deploy(self, names, bld_ct, *, source, ipv4_only=False):

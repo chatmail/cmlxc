@@ -45,7 +45,7 @@ class CmdeployDriver(Driver):
             repo_path = ct.get_repo_path(self.REPO_NAME)
             venv_path = ct.get_venv_path(self.REPO_NAME)
 
-            self.out.print(f"  Setting up {repo_path} (from {source.description}) ...")
+            self.out.print(f"  Setting up {repo_path} ...")
             bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
 
             self.out.print(f"  Installing cmdeploy/chatmaild in {venv_path} ...")
@@ -94,6 +94,9 @@ class CmdeployDriver(Driver):
 
         # Deploy chatmail on each relay
         for ct in relays:
+            # Bootstrap minimal A record so cmdeploy can find the relay
+            dns_ct.set_dns_records(ct.domain, f"{ct.domain}. 3600 IN A {ct.ipv4}")
+
             with out.section(f"cmdeploy run: {ct.sname} ({ct.domain})"):
                 out.print("Preparing chatmail.ini on builder ...")
                 write_ini(builder_ct, ct, disable_ipv6=ct.is_ipv6_disabled)
