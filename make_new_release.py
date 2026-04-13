@@ -141,18 +141,10 @@ def main():
         print("Cancelled.")
         return
 
-    # 1. Tag
-    print(f"Tagging {tag} ...")
-    if run(["git", "tag", tag]) != 0:
-        print("Error: Failed to create tag.")
-        sys.exit(1)
-
     # 2. Generate changelog
     print("Generating CHANGELOG.md ...")
     if run(["git", "cliff", "-o", "CHANGELOG.md"]) != 0:
         print("Error: Failed to generate changelog.")
-        # Cleanup tag
-        run(["git", "tag", "-d", tag], capture=True)
         sys.exit(1)
 
     # 3. Allow manual edits to CHANGELOG.md
@@ -161,17 +153,17 @@ def main():
     if run([editor, "CHANGELOG.md"]) != 0:
         print("Warning: Editor exited with error, continuing anyway.")
 
-    # 4. Amend the tag commit to include CHANGELOG.md
-    print("Amending commit with changelog ...")
+    # 4. Create release commit
+    print(f"Creating release commit for {tag} ...")
     run(["git", "add", "CHANGELOG.md"])
-    if run(["git", "commit", "--amend", "--no-edit"]) != 0:
-        print("Error: Failed to amend commit.")
+    if run(["git", "commit", "-m", f"chore: release {tag}"]) != 0:
+        print("Error: Failed to create release commit.")
         sys.exit(1)
 
-    # 5. Force-tag the amended commit
-    print(f"Updating tag {tag} to amended commit ...")
-    if run(["git", "tag", "-f", tag]) != 0:
-        print("Error: Failed to update tag.")
+    # 5. Tag the release commit
+    print(f"Tagging {tag} ...")
+    if run(["git", "tag", "-af", tag, "-m", f"Release {tag}"]) != 0:
+        print("Error: Failed to create tag.")
         sys.exit(1)
 
     print(f"\nSuccessfully released {tag}.")
