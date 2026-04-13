@@ -183,17 +183,20 @@ To make a new release, use the provided script:
 
 The script automates the following steps:
 
-1. **Preview** unreleased changes with `git cliff`.
+1. **Test** the codebase by running a full `tox` suite and functional
+   tests (`pytest tests/fullrun.py`).
 
-2. **Tag** the release (suggesting automatic, micro, or minor bump).
+2. **Preview** unreleased changes with `git cliff`.
 
-3. **Generate** the full changelog into `CHANGELOG.md`.
+3. **Tag** the release (suggesting automatic, micro, or minor bump).
 
-4. **Edit** the changelog manually (opens your `$EDITOR`).
+4. **Generate** the full changelog into `CHANGELOG.md`.
 
-5. **Amend** the tag commit to include the changelog update.
+5. **Edit** the changelog manually (opens your `$EDITOR`).
 
-6. **Force-tag** the amended commit.
+6. **Amend** the tag commit to include the changelog update.
+
+7. **Force-tag** the amended commit.
 
 
 After the script finishes, push the changes:

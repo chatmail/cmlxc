@@ -61,6 +61,16 @@ def main():
         print("Please commit or stash them before releasing.")
         sys.exit(1)
 
+    print("--- Running tests with tox ---")
+    if run(["tox"]) != 0:
+        print("Error: Tox tests failed. Aborting release.")
+        sys.exit(1)
+
+    print("--- Running functional tests (fullrun.py) ---")
+    if run(["pytest", "tests/fullrun.py", "-v", "-x", "-s"]) != 0:
+        print("Error: Functional tests (fullrun.py) failed. Aborting release.")
+        sys.exit(1)
+
     current = get_current_version()
     print(f"Current version: v{current}")
 
