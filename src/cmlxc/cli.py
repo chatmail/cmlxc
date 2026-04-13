@@ -106,7 +106,7 @@ def init_cmd(args, out):
 
         dns_ip = dns_ct.ipv4
         out.print(f"  {DNS_CONTAINER_NAME} IP: {dns_ip}")
-        _print_dns_forwarding_status(out, dns_ip)
+        _print_dns_forwarding_status(out, dns_ip, host=False)
 
         out.green(f"Ensuring {BUILDER_CONTAINER_NAME} container ...")
         bld_ct = ix.get_container(BUILDER_CONTAINER_NAME)
@@ -417,6 +417,11 @@ def status_cmd_options(parser):
         nargs="?",
         help="Optional container name (short or long) to show.",
     ).completer = _container_completer
+    parser.add_argument(
+        "--host",
+        action="store_true",
+        help="Show detailed host configuration (DNS forwarding, resolvectl).",
+    )
 
 
 def status_cmd(args, out):
@@ -457,8 +462,10 @@ def status_cmd(args, out):
         return 0
 
     out.section_line("Host ssh and DNS configuration")
-    _print_ssh_status(out, ix)
-    _print_dns_forwarding_status(out, dns_ip)
+    need_ssh = _print_ssh_status(out, ix, host=args.host)
+    need_dns = _print_dns_forwarding_status(out, dns_ip, host=args.host)
+    if (need_ssh or need_dns) and not args.host:
+        out.print("use 'cmlxc status --host' for setup instructions")
     return 0
 
 
@@ -525,22 +532,32 @@ def _print_builder_repos(out, ct):
         out.print("repos: (unavailable)")
 
 
-def _print_ssh_status(out, ix):
+def _print_ssh_status(out, ix, *, host=False):
+    """Returns True when SSH is not configured and host details were omitted."""
     ssh_cfg = ix.ssh_config_path
     if ix.check_ssh_include():
         out.green(f"SSH: ~/.ssh/config includes {ix.ssh_config_path} ✓")
-    else:
-        out.red(f"SSH: ~/.ssh/config does NOT include {ix.ssh_config_path}")
+        return False
+
+    msg = f"SSH: ~/.ssh/config does NOT include {ix.ssh_config_path}"
+    if host:
+        out.red(msg)
         sub = out.new_prefixed_out()
         sub.print("Add to ~/.ssh/config:")
         sub.print(f"    Include {ssh_cfg}")
+        return False
+
+    out.print(msg)
+    return True
 
 
-def _print_dns_forwarding_status(out, dns_ip):
+def _print_dns_forwarding_status(out, dns_ip, *, host=False):
+    """Returns True when DNS is not configured and host details were omitted."""
     sub = out.new_prefixed_out()
     if not dns_ip:
         out.red("DNS: ns-localchat container not found")
-        return
+        return False
+
     try:
         rv = subprocess.run(
             ["resolvectl", "status", "incusbr0"],
@@ -550,25 +567,31 @@ def _print_dns_forwarding_status(out, dns_ip):
         )
     except FileNotFoundError:
         sub.print("DNS: cannot check forwarding (resolvectl not found)")
-        return
+        return False
     except OSError as exc:
         sub.red(f"DNS: failed to check forwarding ({exc})")
-        return
+        return False
 
     if rv.returncode != 0:
         sub.red("DNS: failed to query resolvectl status for incusbr0")
         if rv.stderr.strip():
             sub.print(rv.stderr.strip())
-        return
+        return False
 
     dns_ok = dns_ip in rv.stdout and "localchat" in rv.stdout
-    if dns_ok is True:
+    if dns_ok:
         out.green(f"DNS: .localchat forwarding to {dns_ip} ✓")
-    else:
+        return False
+
+    if host:
         out.red("DNS: .localchat forwarding NOT configured")
         sub.print("Run:")
         sub.print(f"    sudo resolvectl dns incusbr0 {dns_ip}")
         sub.print("    sudo resolvectl domain incusbr0 ~localchat")
+        return False
+
+    out.print("DNS: .localchat forwarding NOT configured")
+    return True
 
 
 # -------------------------------------------------------------------
