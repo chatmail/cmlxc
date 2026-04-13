@@ -15,7 +15,6 @@ a container must be destroyed before switching drivers.
 import ipaddress
 import json
 import shlex
-import shutil
 import subprocess
 import textwrap
 import time
@@ -536,9 +535,6 @@ class RelayContainer(Container):
             domain=f"_{name}{DOMAIN_SUFFIX}",
         )
         self.sname = name
-        self.relay_dir = incus.config_dir / name
-        self.ini = self.relay_dir / "chatmail.ini"
-        self.zone = self.relay_dir / "chatmail.zone"
 
     @property
     def driver(self):
@@ -601,8 +597,6 @@ class RelayContainer(Container):
 
     def destroy(self):
         super().destroy()
-        if self.relay_dir.exists():
-            shutil.rmtree(self.relay_dir)
 
     def disable_ipv6(self):
         # incus provides net.* virtualization for LXC containers so that
@@ -762,7 +756,7 @@ class ContainerBuilder(Container):
         if self.bash(f"test -d {repo_path}", check=False) is None:
             return None
         commit = self.bash(
-            f"cd {repo_path} && git log --oneline -1 --no-decorate",
+            f"cd {repo_path} && git log -1 --format='%h %s' --abbrev=12",
             check=False,
         )
         if commit:

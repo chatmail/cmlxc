@@ -78,7 +78,6 @@ class CmdeployDriver(Driver):
 
         # Check deploy locks before doing anything destructive
         for ct in relays:
-            ct.relay_dir.mkdir(parents=True, exist_ok=True)
             ct.check_deploy_lock(CMDEPLOY)
 
         ix.write_ssh_config()
@@ -96,13 +95,11 @@ class CmdeployDriver(Driver):
         # Deploy chatmail on each relay
         for ct in relays:
             with out.section(f"cmdeploy run: {ct.sname} ({ct.domain})"):
-                out.print(f"Writing {ct.ini.name} ...")
+                out.print("Preparing chatmail.ini on builder ...")
                 write_ini(builder_ct, ct, disable_ipv6=ct.is_ipv6_disabled)
 
-                # Push INI into isolated relay directory
+                # Use isolated relay directory on builder
                 repo_path = ct.get_repo_path(self.REPO_NAME)
-                ini_dest = f"{repo_path}/chatmail.ini"
-                builder_ct.push_chatmail_ini(ct.ini, ini_dest)
 
                 ret = self._run_cmdeploy(
                     builder_ct, ct, "run", extra=["--skip-dns-check"]
@@ -129,14 +126,13 @@ class CmdeployDriver(Driver):
                     out.red(f"DNS zone generation for {ct.sname} failed (exit {ret})")
                     return ret
 
-                # Pull zonefile from builder to host
+                # Get zonefile content from builder and load into PowerDNS
                 zone_content = builder_ct.bash(f"cat {zone_path}", check=False)
                 if zone_content:
-                    ct.zone.write_text(zone_content)
-
-                if ct.zone.exists():
-                    out.print(f"Loading {ct.zone} into PowerDNS ...")
-                    dns_ct.set_dns_records(ct.domain, ct.zone.read_text())
+                    out.print("  Loading zone content into PowerDNS ...")
+                    dns_ct.set_dns_records(ct.domain, zone_content)
+                else:
+                    out.red(f"  Empty zone file for {ct.sname}")
 
             out.print(f"Restarting filtermail-incoming on {ct.name} ...")
             ct.bash("systemctl restart filtermail-incoming")
@@ -233,7 +229,4 @@ def write_ini(builder_ct, ct, disable_ipv6=False):
     if disable_ipv6:
         overrides["disable_ipv6"] = "True"
 
-    ct.relay_dir.mkdir(parents=True, exist_ok=True)
-    content = generate_chatmail_ini(builder_ct, ct, ct.domain, overrides)
-    ct.ini.write_text(content)
-    return ct.ini
+    generate_chatmail_ini(builder_ct, ct, ct.domain, overrides)

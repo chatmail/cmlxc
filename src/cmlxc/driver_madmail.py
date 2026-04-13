@@ -84,7 +84,6 @@ class MadmailDriver(Driver):
 
         # Check deploy locks
         for ct in relays:
-            ct.relay_dir.mkdir(parents=True, exist_ok=True)
             ct.check_deploy_lock(MADMAIL)
 
         ix.write_ssh_config()

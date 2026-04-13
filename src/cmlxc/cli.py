@@ -285,14 +285,10 @@ def test_cmdeploy_cmd(args, out):
             return 1
 
     with out.section("cmdeploytest"):
-        out.print(f"Writing {first_ct.ini.name} ...")
+        out.print("Preparing chatmail.ini on builder ...")
         driver_cmdeploy.write_ini(
             bld_ct, first_ct, disable_ipv6=first_ct.is_ipv6_disabled
         )
-
-        repo_path = first_ct.get_repo_path(driver_cmdeploy.CMDEPLOY)
-        ini_dest = f"{repo_path}/chatmail.ini"
-        bld_ct.push_chatmail_ini(first_ct.ini, ini_dest)
 
         relays = [ix.get_container(n) for n in relay_names]
         out.print("Setting up SSH access to relay containers ...")
@@ -491,7 +487,6 @@ def _print_container_status(out, c, ix):
 
     detail_out = out.new_prefixed_out(" " * 21)
     if isinstance(ct, RelayContainer):
-        detail_out.print(f"config: {ct.relay_dir.resolve()}")
         driver_name = ct.driver
         if driver_name and is_running:
             bld_ct = ix.get_container(BUILDER_CONTAINER_NAME)
@@ -503,6 +498,7 @@ def _print_container_status(out, c, ix):
                     source_ref = state.get("source") or "?"
                     detail_out.print(f"source: {source_ref}")
                     detail_out.print(f"        {status}")
+                    detail_out.print(f"builder: {repo_path}")
 
     elif isinstance(ct, ContainerBuilder) and is_running:
         _print_builder_repos(detail_out, ct)

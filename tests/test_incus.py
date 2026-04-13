@@ -63,9 +63,9 @@ def test_relay_container_naming(ix):
     assert ct.sname == "t0"
     assert ct.name == "t0-localchat"
     assert ct.domain == "_t0.localchat"
-    assert ct.relay_dir == ix.config_dir / "t0"
-    assert ct.ini == ct.relay_dir / "chatmail.ini"
-    assert ct.zone == ct.relay_dir / "chatmail.zone"
+    # repo and venv paths on builder
+    assert ct.get_repo_path("cmdeploy") == "/root/cmdeploy-t0"
+    assert ct.get_venv_path("cmdeploy") == "/root/cmdeploy-t0/venv"
 
 
 def test_get_container_dispatch(ix):
