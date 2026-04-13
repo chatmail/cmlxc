@@ -96,6 +96,10 @@ def format_ssh_config(containers, key_path):
             short = domain.split(".")[0]
             if short and short not in hosts:
                 hosts.append(short)
+            # also allow short name without the leading underscore
+            bare = short.lstrip("_")
+            if bare and bare not in hosts:
+                hosts.append(bare)
         lines.append(f"\nHost {' '.join(hosts)}\n")
         lines.append(f"    Hostname {ip}\n")
         lines.append("    User root\n")
