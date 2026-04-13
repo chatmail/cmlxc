@@ -159,9 +159,8 @@ class Driver:
                 return 1
 
             source = parse_source(args.source, cls.DEFAULT_SOURCE_URL)
-            with out.section(
-                f"Preparing {cls.CLI_NAME} source in builder ({source.description})"
-            ):
+            with out.section(f"Preparing {cls.CLI_NAME} source in builder"):
+                out.print(f"  Source: {source.description}")
                 driver.init_builder(bld_ct, source=source, names=args.names)
 
             return driver.run_deploy(

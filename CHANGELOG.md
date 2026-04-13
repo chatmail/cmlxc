@@ -12,6 +12,17 @@
 - remove all per-container state, and put it into the build container instead.
 - move host setup instructions behind 'status --host', revise output.
 
+### Fixes
+
+- reusable workflow caching.
+- add missing driver_base.py file.
+- allow concurrent cmlxc runs, and prevent conflicts on ssh-config manipulations, allow drivers to participate in builder container preparation.
+
+### Miscellaneous Tasks
+
+- improve release script to also first run tests.
+- reduce number of printed references, fix DNS issues.
+
 ### Refactor
 
 - [**breaking**] cli: shift driver specific CLI handling to driver modules.

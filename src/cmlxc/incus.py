@@ -694,17 +694,21 @@ class ContainerBuilder(Container):
 
     def install_deps(self):
         self.bash("""
-            apt-get -o DPkg::Lock::Timeout=60 update
-            DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                python3-venv git gcc make python3-dev rsync
-            python3 -m venv /root/minitest-venv
-            /root/minitest-venv/bin/pip install \\
-                pytest \\
-                pytest-xdist \\
-                deltachat-rpc-client \\
-                deltachat-rpc-server \\
-                imap-tools \\
-                requests
+            if ! command -v git >/dev/null 2>&1 || ! command -v make >/dev/null 2>&1; then
+                apt-get -o DPkg::Lock::Timeout=60 update
+                DEBIAN_FRONTEND=noninteractive apt-get install -y \
+                    python3-venv git gcc make python3-dev rsync
+            fi
+            if [ ! -d /root/minitest-venv ]; then
+                python3 -m venv /root/minitest-venv
+                /root/minitest-venv/bin/pip install \
+                    pytest \
+                    pytest-xdist \
+                    deltachat-rpc-client \
+                    deltachat-rpc-server \
+                    imap-tools \
+                    requests
+            fi
         """)
 
     def sync_to(self, local_path, remote_path):
@@ -743,17 +747,14 @@ class ContainerBuilder(Container):
             self.sync_to(source.path, dest)
         else:
             self.bash(f"git clone --depth=1 -b {source.ref} {source.url} {dest}")
+            self.bash(f"""
+                cd {dest}
+                if [ -f .gitmodules ]; then
+                    sed -i 's|git@github.com:|https://github.com/|' .gitmodules
+                    git submodule update --init --recursive --depth 1
+                fi
+            """)
         self.bash(f"git config --global --add safe.directory {dest}")
-
-    def install_relay_deps(self, repo_path, venv_path):
-        self.bash(f"""
-            if [ ! -d {venv_path} ]; then
-                python3 -m venv {venv_path}
-            fi
-            {venv_path}/bin/pip install \
-                -e {repo_path}/chatmaild \
-                -e {repo_path}/cmdeploy
-        """)
 
     def get_repo_status(self, repo_path):
         """Return a one-line string describing the git repo at repo_path."""
@@ -786,34 +787,41 @@ class ContainerBuilder(Container):
 
     def setup_ssh(self, relay_containers):
         key = self.incus.ssh_key_path
-        self.bash("mkdir -p /root/.ssh && chmod 700 /root/.ssh")
+        self.bash("mkdir -p /root/.ssh/config.d && chmod 700 /root/.ssh")
         self.incus.run(
             ["file", "push", str(key), f"{self.name}/root/.ssh/id_localchat"]
         )
         self.bash("chown root:root /root/.ssh/id_localchat")
         self.bash("chmod 600 /root/.ssh/id_localchat")
+        self.bash("echo 'Include /root/.ssh/config.d/*' > /root/.ssh/config")
 
-        lines = []
         for ct in relay_containers:
             if not ct.ipv4:
                 ct.wait_ready()
-            lines.append(f"Host {ct.domain} {ct.name}")
-            lines.append(f"    Hostname {ct.ipv4}")
-            lines.append("    User root")
-            lines.append("    IdentityFile /root/.ssh/id_localchat")
-            lines.append("    IdentitiesOnly yes")
-            lines.append("    StrictHostKeyChecking accept-new")
-            lines.append("    UserKnownHostsFile /dev/null")
-            lines.append("    LogLevel ERROR")
-            lines.append("")
-        config_content = "\n".join(lines)
-        self.bash(f"""\
-            cat > /root/.ssh/config << 'SSHEOF'
-{config_content}
-SSHEOF
-            chown root:root /root/.ssh/config
-            chmod 600 /root/.ssh/config
-        """)
+            hosts = [ct.domain, ct.name]
+            # also allow short name without the leading underscore
+            short = ct.domain.split(".")[0]
+            bare = short.lstrip("_")
+            for alias in [short, bare]:
+                if alias and alias not in hosts:
+                    hosts.append(alias)
+
+            config_content = f"""\
+Host {" ".join(hosts)}
+    Hostname {ct.ipv4}
+    User root
+    IdentityFile /root/.ssh/id_localchat
+    IdentitiesOnly yes
+    StrictHostKeyChecking accept-new
+    UserKnownHostsFile /dev/null
+    LogLevel ERROR
+"""
+            tmp_path = f"/tmp/ssh-config-{ct.name}"
+            self.incus.run(
+                ["exec", self.name, "--", "bash", "-c", f"cat > {tmp_path}"],
+                input=config_content,
+            )
+            self.bash(f"mv {tmp_path} /root/.ssh/config.d/{ct.name}")
 
     def run_cmdeploy_tests(self, repo_path, venv_path, pytest_args, out, env=None):
         ini_path = f"{repo_path}/chatmail.ini"

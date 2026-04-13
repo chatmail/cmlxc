@@ -28,28 +28,8 @@ class MadmailDriver(Driver):
         tmp_dest = f"/root/{self.REPO_NAME}-template"
         bld_ct.setup_repo(tmp_dest, self.out, source)
 
-        self.out.print("  Installing build dependencies ...")
-        bld_ct.bash("DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl")
-
-        # Install Go from upstream, version parsed from template's go.mod.
-        bld_ct.bash(f"""
-            NEED=$(awk '/^go / {{print $2}}' {tmp_dest}/go.mod)
-            ARCH=$(dpkg --print-architecture)
-            case "$ARCH" in
-                amd64) GOARCH=amd64 ;;
-                arm64) GOARCH=arm64 ;;
-                *) echo "unsupported arch: $ARCH" >&2; exit 1 ;;
-            esac
-            if [ -x /usr/local/go/bin/go ]; then
-                HAVE=$(/usr/local/go/bin/go version | awk '{{print $3}}' | sed 's/^go//')
-                [ "$HAVE" = "$NEED" ] && exit 0
-            fi
-            URL="https://go.dev/dl/go${{NEED}}.linux-${{GOARCH}}.tar.gz"
-            echo "Installing Go ${{NEED}} from ${{URL}} ..."
-            curl -fsSL "$URL" | tar -C /usr/local -xzf -
-            ln -sf /usr/local/go/bin/go /usr/local/bin/go
-            ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt
-        """)
+        self.out.print("  Ensuring build environment (Go) ...")
+        prepare_build_container(bld_ct, tmp_dest)
 
         with self.out.section("Building maddy binary (once for this source)"):
             self._build(bld_ct, tmp_dest)
@@ -133,3 +113,40 @@ class MadmailDriver(Driver):
         )
         if ret:
             raise RuntimeError(f"maddy build failed in {repo_path} (exit {ret})")
+
+
+def prepare_build_container(bld_ct, go_mod_path):
+    """Install or update Go inside the builder according to go.mod."""
+    bld_ct.bash(f"""
+        if ! command -v node >/dev/null 2>&1 || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 22 ]; then
+            apt-get -o DPkg::Lock::Timeout=60 update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl unzip
+            curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs
+        fi
+        if ! command -v bun >/dev/null 2>&1; then
+            curl -fsSL https://bun.sh/install | bash
+            ln -sf /root/.bun/bin/bun /usr/local/bin/bun
+        fi
+        if [ -f "{go_mod_path}/admin-web/package.json" ]; then
+            cd "{go_mod_path}/admin-web" && bun install
+        fi
+    """)
+    bld_ct.bash(f"""
+        NEED=$(awk '/^go / {{print $2}}' {go_mod_path}/go.mod)
+        ARCH=$(dpkg --print-architecture)
+        case "$ARCH" in
+            amd64) GOARCH=amd64 ;;
+            arm64) GOARCH=arm64 ;;
+            *) echo "unsupported arch: $ARCH" >&2; exit 1 ;;
+        esac
+        if [ -x /usr/local/go/bin/go ]; then
+            HAVE=$(/usr/local/go/bin/go version | awk '{{print $3}}' | sed 's/^go//')
+            [ "$HAVE" = "$NEED" ] && exit 0
+        fi
+        URL="https://go.dev/dl/go${{NEED}}.linux-${{GOARCH}}.tar.gz"
+        echo "Installing Go ${{NEED}} from ${{URL}} ..."
+        curl -fsSL "$URL" | tar -C /usr/local -xzf -
+        ln -sf /usr/local/go/bin/go /usr/local/bin/go
+        ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+    """)

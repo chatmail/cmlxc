@@ -490,7 +490,7 @@ def _print_container_status(out, c, ix):
     domain = c.get("domain", "")
     ip = c.get("ip") or "?"
     ipv6 = c.get("ipv6")
-    out.print(f"{domain:20s} IPv4 {ip}, IPv6 {ipv6}")
+    out.print(f"{domain:20s} IPv4 {ip}  IPv6 {ipv6}")
 
     detail_out = out.new_prefixed_out(" " * 21)
     if isinstance(ct, RelayContainer):

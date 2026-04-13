@@ -49,7 +49,7 @@ class CmdeployDriver(Driver):
             bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
 
             self.out.print(f"  Installing cmdeploy/chatmaild in {venv_path} ...")
-            bld_ct.install_relay_deps(repo_path, venv_path)
+            prepare_build_container(bld_ct, repo_path, venv_path)
 
     def run_deploy(self, names, bld_ct, *, source, ipv4_only=False):
         """Ensure relay containers and deploy cmdeploy."""
@@ -231,5 +231,16 @@ def write_ini(builder_ct, ct, disable_ipv6=False):
     }
     if disable_ipv6:
         overrides["disable_ipv6"] = "True"
-
     generate_chatmail_ini(builder_ct, ct, ct.domain, overrides)
+
+
+def prepare_build_container(bld_ct, repo_path, venv_path):
+    """Install chatmaild/cmdeploy into a venv on the builder."""
+    bld_ct.bash(f"""
+        if [ ! -d {venv_path} ]; then
+            python3 -m venv {venv_path}
+        fi
+        {venv_path}/bin/pip install \
+            -e {repo_path}/chatmaild \
+            -e {repo_path}/cmdeploy
+    """)
