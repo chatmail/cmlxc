@@ -14,6 +14,16 @@ See [Architecture](#architecture) for more internal details.
 Usually only being part of the "incus" group is necessary,
 as containers can run with user privileges.
 
+You can verify your incus installation like this:
+
+    incus launch images:debian/12 local-my-setup
+
+If this command fails, please check the incus documentation.
+If you get an error about "Failed instance creation", 
+you might be running into https://github.com/lxc/incus/issues/916
+and need to ensure there is no component (mullvad) for example,
+that messes up container networking. 
+
 
 ## Installation
 
