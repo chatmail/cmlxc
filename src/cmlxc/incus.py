@@ -274,7 +274,17 @@ class Incus:
 
         self.run(["delete", BASE_SETUP_NAME, "--force"], check=False)
         self.run(["image", "delete", BASE_IMAGE_ALIAS], check=False)
-        self.run(["launch", UPSTREAM_IMAGE, BASE_SETUP_NAME])
+        self.run(
+            [
+                "launch",
+                UPSTREAM_IMAGE,
+                BASE_SETUP_NAME,
+                "-c",
+                f"{LABEL_KEY}=true",
+                "-c",
+                f"{LABEL_DOMAIN}=setup{DOMAIN_SUFFIX}",
+            ]
+        )
 
         ct = Container(self, BASE_SETUP_NAME)
         ct.wait_ready()
