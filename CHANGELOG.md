@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## [0.7.1] - 2026-04-13
 
 ### Miscellaneous Tasks
 
@@ -93,7 +93,7 @@
 
 - initial commit of cmlxc tool.
 
-[unreleased]: https://github.com/chatmail/cmlxc/compare/v0.7.0..HEAD
+[0.7.1]: https://github.com/chatmail/cmlxc/compare/v0.7.0..v0.7.1
 [0.7.0]: https://github.com/chatmail/cmlxc/compare/v0.6.4..v0.7.0
 [0.6.4]: https://github.com/chatmail/cmlxc/compare/v0.6.3..v0.6.4
 [0.6.3]: https://github.com/chatmail/cmlxc/compare/v0.5.0..v0.6.3
