@@ -70,7 +70,7 @@ jobs:
       - name: Import cached images
         run: |
           mkdir -p /tmp/incus-cache
-          for alias in localchat-base localchat-builder localchat-relay; do
+          for alias in localchat-base localchat-builder localchat-cmdeploy; do
             if [ -f /tmp/incus-cache/$alias.tar.gz ]; then
               echo "Importing: $alias"
               incus image import /tmp/incus-cache/$alias.tar.gz --alias $alias || true
@@ -97,7 +97,7 @@ jobs:
             echo "Publishing builder container as image ..."
             incus publish builder-localchat --alias localchat-builder --force || true
           fi
-          for alias in localchat-base localchat-builder localchat-relay; do
+          for alias in localchat-base localchat-builder localchat-cmdeploy; do
             if incus image list --format csv -c l | grep -q "^$alias$"; then
               echo "Exporting: $alias"
               incus image export $alias /tmp/incus-cache/$alias || true
