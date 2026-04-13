@@ -142,8 +142,8 @@ def main():
         return
 
     # 2. Generate changelog
-    print("Generating CHANGELOG.md ...")
-    if run(["git", "cliff", "-o", "CHANGELOG.md"]) != 0:
+    print(f"Generating CHANGELOG.md for {tag} ...")
+    if run(["git", "cliff", "--tag", tag, "-o", "CHANGELOG.md"]) != 0:
         print("Error: Failed to generate changelog.")
         sys.exit(1)
 
@@ -168,7 +168,7 @@ def main():
 
     print(f"\nSuccessfully released {tag}.")
     print("\nNext steps:")
-    print("  git push origin main --tags")
+    print(f"  git push origin main {tag}")
 
 
 if __name__ == "__main__":

@@ -1,16 +1,27 @@
 # Changelog
 
+## [unreleased]
+
+### Miscellaneous Tasks
+
+- revise automatic releasing to avoid amending local commits.
+
 ## [0.7.0] - 2026-04-13
 
-### Refactor
+### CI
 
-- [**breaking**] cli: shift driver specific CLI handling to driver modules.
+- skip image export on cache hit in lxc-test.
+
+### Documentation
+
+- reformat README and add release automation script.
 
 ### Features / Changes
 
 - better per-relay status, and generally more exact references in the output.
 - remove all per-container state, and put it into the build container instead.
 - move host setup instructions behind 'status --host', revise output.
+- make_new_release.py checks for proper git state.
 - make_new_release.py checks for proper git state.
 
 ### Fixes
@@ -27,18 +38,13 @@
 - improve release script to also first run tests.
 - reduce number of printed references, fix DNS issues.
 
-### CI
-
-- skip image export on cache hit in lxc-test.
-
-### Documentation
-
-- reformat README and add release automation script.
-
 ### Other
 
 - reorder README.
 
+### Refactor
+
+- [**breaking**] cli: shift driver specific CLI handling to driver modules.
 
 ## [0.6.4] - 2026-04-12
 
@@ -87,6 +93,7 @@
 
 - initial commit of cmlxc tool.
 
+[unreleased]: https://github.com/chatmail/cmlxc/compare/v0.7.0..HEAD
 [0.7.0]: https://github.com/chatmail/cmlxc/compare/v0.6.4..v0.7.0
 [0.6.4]: https://github.com/chatmail/cmlxc/compare/v0.6.3..v0.6.4
 [0.6.3]: https://github.com/chatmail/cmlxc/compare/v0.5.0..v0.6.3
