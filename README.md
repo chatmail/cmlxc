@@ -4,16 +4,13 @@ Manage local [Incus](https://linuxcontainers.org/incus/) containers
 for chatmail relay development and testing.
 
 `cmlxc` spins up lightweight LXC containers,
-deploys chatmail relay services into them
-via `cmdeploy` or `madmail`,
-and runs integration tests --
-all without touching the host system.
+deploys chatmail relay services into them via `cmdeploy` or `madmail`,
+and runs integration tests -- all without touching the host system.
 
 
 ## Prerequisites
 
-[Incus](https://linuxcontainers.org/incus/)
-installed and configured on the host.
+[Incus](https://linuxcontainers.org/incus/) installed and configured on the host.
 Usually only being part of the "incus" group is necessary,
 as containers can run with user privileges.
 
@@ -32,38 +29,40 @@ Or with [uv](https://docs.astral.sh/uv/):
     source venv/bin/activate
     uv pip install cmlxc
 
+
 ## Usage
 
 **Initialize the environment**
-(base image, DNS container, builder container).
-At least one of `--cmdeploy` or `--madmail` is required:
+(base image, DNS container, builder container):
 
-    cmlxc init --cmdeploy @main
-    cmlxc init --madmail @main
-    cmlxc init --cmdeploy @main --madmail @main
+    cmlxc init
 
-The `SOURCE` argument controls where the code comes from:
+Re-initialize from scratch (destroys everything first):
+
+    cmlxc init --reset
+
+**Deploy chatmail relays**
+(creates containers if needed, then deploys).
+The `--source` argument controls where the code comes from:
+
+    cmlxc deploy-cmdeploy --source @main cm0 cm1
+    cmlxc deploy-madmail  --source @main mad1
+    cmlxc deploy-madmail  --source @main --ipv4-only mad1
 
 | Form | Meaning |
-|------|---------|
+|---------|---------|
 | `@ref` | Clone default remote at branch/tag `ref` |
 | `/path` or `./path` | Sync from a local checkout |
 | `URL@ref` | Clone a custom remote at `ref` |
 
 Examples with local checkouts or feature branches:
 
-    cmlxc init --cmdeploy ../relay --madmail @lmtp-rework
-    cmlxc init --cmdeploy @fix-dovecot
+    cmlxc deploy-cmdeploy --source ../relay cm0
+    cmlxc deploy-madmail  --source @lmtp-rework mad0
+    cmlxc deploy-cmdeploy --source @fix-dovecot cm1
 
-Running `init` again wipes and re-clones the repositories
-in the builder.
-
-**Deploy chatmail relays**
-(creates containers if needed, then deploys):
-
-    cmlxc deploy-cmdeploy cm0 cm1
-    cmlxc deploy-madmail mad1
-    cmlxc deploy-madmail --ipv4-only mad1
+Each `deploy-*` invocation initialises the driver's source
+in the builder (wipe-and-reclone).
 
 **Run integration tests** inside the builder:
 
@@ -82,16 +81,16 @@ in the builder.
     cmlxc stop cm0 cm1          # stop relays
     cmlxc destroy cm0           # stop + delete
     cmlxc destroy --all         # destroy relays, keep DNS/builder
-    cmlxc destroy --reset       # full teardown, requires re-init
 
 **Increase verbosity** with `-v` or `-vv`:
 
-    cmlxc deploy-cmdeploy -vv cm1
+    cmlxc deploy-cmdeploy --source @main -vv cm1
 
 
 ## Shell Completion
 
-`cmlxc` supports Bash tab-completion for subcommands, options, and container names.
+`cmlxc` supports Bash tab-completion
+for subcommands, options, and container names.
 
 Enable for the **current session**:
 
@@ -108,7 +107,8 @@ activate-global-python-argcomplete --user
 
 ## Architecture
 
-`cmlxc` manages four kinds of containers, each with a distinct role:
+`cmlxc` manages four kinds of containers,
+each with a distinct role:
 
 ```
     cmlxc init / deploy-* / test-*
@@ -124,64 +124,55 @@ activate-global-python-argcomplete --user
 ```
 
 **Base image** (`localchat-base`) --
-A Debian 12 image with SSH and Python pre-installed.
+a Debian 12 image with SSH and Python pre-installed.
 All other containers are launched from this image
 (or from a cached relay image).
 
 **DNS container** (`ns-localchat`) --
-Runs PowerDNS authoritative + recursor.
+runs PowerDNS authoritative + recursor.
 Provides `.localchat` DNS resolution
 so containers can reach each other by name.
 
 **Builder container** (`builder-localchat`) --
-The central workhorse.
+the central workhorse.
 Holds repository checkouts (`/root/relay`, `/root/madmail`),
 Python virtualenvs for `cmdeploy` and mini-tests,
 and the compiled `maddy` binary.
-All deployment and test operations
-are executed *inside* the builder --
+All deployment and test operations are executed *inside* the builder --
 the host only needs `cmlxc` itself.
 
 **Relay containers** (e.g. `cm0-localchat`, `mad1-localchat`) --
-Ephemeral containers that receive a deployed chatmail service.
-Each relay is locked to a single deployment driver
-(`cmdeploy` or `madmail`);
+ephemeral containers that receive a deployed chatmail service.
+Each relay is locked to a single deployment driver (`cmdeploy` or `madmail`);
 switching requires destroying and re-creating the container.
 
 
 ### Deployment drivers
 
 Drivers live in `driver_cmdeploy.py` and `driver_madmail.py`.
-Each driver has an `init_builder()` function
-(called during `cmlxc init`)
-and a `deploy()` function
-(called during `cmlxc deploy-*`).
+Each driver module is self-registering --
+it exports its CLI metadata, builder init, and deploy orchestration.
+`cli.py` generates the `deploy-*` subcommands from a `DEPLOY_DRIVERS` list.
 
 - **cmdeploy** --
-  Runs `cmdeploy run` from the builder container
-  over SSH into the relay.
-  Generates DNS zones, loads them into PowerDNS,
-  and verifies records.
-  After the first successful deploy
-  the relay image is cached as `localchat-relay`
-  so subsequent containers start pre-populated.
+  runs `cmdeploy run` from the builder container over SSH into the relay.
+  Generates DNS zones, loads them into PowerDNS, and verifies records.
+  After the first successful deploy the relay image is cached
+  as `localchat-relay` so subsequent containers start pre-populated.
 
 - **madmail** --
-  Builds the `maddy` Go binary on first deploy
+  builds the `maddy` Go binary inside the builder
   (the triggered `make` is idempotent on reruns),
-  then pushes it via SCP
-  and runs `madmail install --simple --ip <IP>`.
+  then pushes it via SCP and runs `madmail install --simple --ip <IP>`.
   No DNS entries are needed.
-
 
 
 ## Releasing
 
-Versions are derived from git tags
-via `setuptools-git-versioning`.
-The changelog is generated with
-[git-cliff](https://git-cliff.org/)
+Versions are derived from git tags via `setuptools-git-versioning`.
+The changelog is generated with [git-cliff](https://git-cliff.org/)
 using the `cliff.toml` config in the repo root.
+
 
 ### Steps
 
@@ -189,8 +180,7 @@ using the `cliff.toml` config in the repo root.
 
        git cliff --unreleased
 
-2. **Tag** the release
-   (the tag name becomes the version):
+2. **Tag** the release (the tag name becomes the version):
 
        git tag v0.1.0
 
@@ -198,8 +188,7 @@ using the `cliff.toml` config in the repo root.
 
        git cliff -o CHANGELOG.md
 
-4. **Amend** the tag commit
-   to include the changelog:
+4. **Amend** the tag commit to include the changelog:
 
        git add CHANGELOG.md
        git commit --amend --no-edit
@@ -209,8 +198,6 @@ using the `cliff.toml` config in the repo root.
 
        git push origin main --tags
 
-The `release.yml` GitHub workflow
-triggers on pushed `v*` tags,
+The `release.yml` GitHub workflow triggers on pushed `v*` tags,
 builds the sdist + wheel,
-and publishes to PyPI
-via trusted publishing (OIDC).
+and publishes to PyPI via trusted publishing (OIDC).

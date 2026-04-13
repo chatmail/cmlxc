@@ -41,7 +41,6 @@ DOMAIN_SUFFIX = ".localchat"
 # Image names
 UPSTREAM_IMAGE = "images:debian/12"
 BASE_IMAGE_ALIAS = "localchat-base"
-RELAY_IMAGE_ALIAS = "localchat-relay"
 
 # Container and DNS names
 BASE_SETUP_NAME = "localchat-base-setup"
@@ -229,7 +228,7 @@ class Incus:
         for img in self.run_json(["image", "list"]):
             aliases = [a["name"] for a in img.get("aliases", [])]
             is_localchat = any(a.startswith("localchat-") for a in aliases)
-            if is_localchat or not aliases:
+            if is_localchat:
                 fp = img["fingerprint"]
                 self.run(["image", "delete", fp], check=False)
 
@@ -304,6 +303,55 @@ class Incus:
         self.out.print(f"  Base image '{BASE_IMAGE_ALIAS}' ready.")
         return BASE_IMAGE_ALIAS
 
+    def ensure_relay_containers(
+        self,
+        names,
+        ipv4_only=False,
+        image_candidates=None,
+    ):
+        """Ensure relay containers are running and reachable via SSH."""
+        out = self.out
+
+        dns_ct = self.get_container(DNS_CONTAINER_NAME)
+        dns_ct.wait_ready(timeout=5)
+        sub = out.new_prefixed_out()
+        sub.print(f"DNS container IP: {dns_ct.ipv4}")
+
+        relays = [self.get_container(n) for n in names]
+        for ct in relays:
+            out.green(f"Ensuring container {ct.name!r} ({ct.domain}) ...")
+            ct.ensure(
+                ipv4_only=ipv4_only,
+                image_candidates=image_candidates,
+            )
+
+            sub.print("Configuring container hostname ...")
+            ct.bash(f"echo '{ct.name}' > /etc/hostname")
+            sub.print(f"IPv4 {ct.ipv4}, IPv6 {ct.ipv6}")
+
+            sub.green(f"Container {ct.name!r} ready: {ct.domain} -> {ct.ipv4}")
+            out.print()
+
+        out.green("Writing ssh-config ...")
+        ssh_cfg = self.write_ssh_config()
+        sub.print(f"{ssh_cfg}")
+
+        for ct in relays:
+            sub.print(f"Verifying SSH to {ct.name} via ssh-config ...")
+            if ct.verify_ssh(ssh_cfg):
+                sub.print(f"SSH OK: ssh -F {self.ssh_config_path} {ct.domain}")
+            else:
+                sub.red(f"WARNING: SSH verification failed for {ct.name}")
+
+        if not self.check_ssh_include():
+            sub.green(
+                "\n(Optional) To use containers from any SSH client,"
+                " add to ~/.ssh/config:"
+            )
+            sub.green(f"    Include {self.ssh_config_path}")
+
+        return relays
+
     def get_container(self, name):
         """Return a DNSContainer, ContainerBuilder, or RelayContainer."""
         if name == DNS_CONTAINER_NAME:
@@ -346,13 +394,16 @@ class Container:
             cmd.append("--force")
         self.incus.run(cmd, check=False)
 
-    def launch(self):
-        """Launch from the base image."""
-        image = self.incus.find_image([BASE_IMAGE_ALIAS])
+    def launch(self, image_candidates=None):
+        """Launch from the base image or a provided candidate."""
+        if image_candidates is None:
+            image_candidates = [BASE_IMAGE_ALIAS]
+
+        image = self.incus.find_image(image_candidates)
         if not image:
             raise RuntimeError(
-                f"No base image '{BASE_IMAGE_ALIAS}' found. "
-                "Call ensure_base_image() before launching containers."
+                f"No suitable image found in {image_candidates}. "
+                "Ensure the base image exists."
             )
         self.out.print(f"  Launching from '{image}' image ...")
         cfg = []
@@ -372,7 +423,7 @@ class Container:
         """Check if IPv6 is disabled in the kernel (sysctl)."""
         return self.run_cmd("sysctl", "-n", "net.ipv6.conf.all.disable_ipv6") == "1"
 
-    def ensure(self, ipv4_only=False, image_preference=None):
+    def ensure(self, ipv4_only=False, image_candidates=None):
         data = self.incus.run_json(["list", self.name], check=False) or []
 
         existing = [c for c in data if c["name"] == self.name]
@@ -380,7 +431,7 @@ class Container:
             if existing[0]["status"] != "Running":
                 self.start()
         else:
-            self.launch()
+            self.launch(image_candidates=image_candidates)
         self.wait_ready(expect_ipv6=not ipv4_only)
 
     def destroy(self):
@@ -471,16 +522,31 @@ class RelayContainer(Container):
         self.ini = self.relay_dir / "chatmail.ini"
         self.zone = self.relay_dir / "chatmail.zone"
 
-    def launch(self, image_preference=None):
-        if image_preference == "base":
-            candidates = [BASE_IMAGE_ALIAS]
-        else:
-            candidates = [RELAY_IMAGE_ALIAS, BASE_IMAGE_ALIAS]
-        image = self.incus.find_image(candidates)
+    @property
+    def driver(self):
+        """Return the driver name used for the last deployment, or None."""
+        state = self.get_deploy_state()
+        return state["driver"] if state else None
+
+    def get_repo_path(self, driver_name=None):
+        """Return the absolute path to the repo in the builder container."""
+        driver = driver_name or self.driver
+        if not driver:
+            raise ValueError(f"No driver known for container {self.sname!r}")
+        return f"/root/{driver}-{self.sname}"
+
+    def get_venv_path(self, driver_name=None):
+        """Return the absolute path to the venv in the builder container."""
+        return f"{self.get_repo_path(driver_name)}/venv"
+
+    def launch(self, image_candidates=None):
+        if image_candidates is None:
+            image_candidates = [BASE_IMAGE_ALIAS]
+        image = self.incus.find_image(image_candidates)
         if not image:
             raise RuntimeError(
-                f"No base image '{BASE_IMAGE_ALIAS}' found. "
-                "Call ensure_base_image() before launching containers."
+                f"No suitable image found in {image_candidates}. "
+                "Ensure images are built."
             )
         self.out.print(f"  Launching from '{image}' image ...")
         cfg = []
@@ -500,14 +566,14 @@ class RelayContainer(Container):
         """)
         return image
 
-    def ensure(self, ipv4_only=False, image_preference=None):
+    def ensure(self, ipv4_only=False, image_candidates=None):
         data = self.incus.run_json(["list", self.name], check=False) or []
         existing = [c for c in data if c["name"] == self.name]
         if existing:
             if existing[0]["status"] != "Running":
                 self.start()
         else:
-            self.launch(image_preference=image_preference)
+            self.launch(image_candidates=image_candidates)
         self.wait_ready(expect_ipv6=not ipv4_only)
         if ipv4_only:
             self.disable_ipv6()
@@ -532,37 +598,6 @@ class RelayContainer(Container):
             """,
         )
 
-    # Services that must not auto-start from a cached image because
-    # they would use stale DNS or network configuration.
-    _CACHED_DISABLE_SERVICES = [
-        "postfix",
-        "dovecot",
-        "unbound",
-        "opendkim",
-        "nginx",
-        "filtermail",
-        "filtermail-incoming",
-        "fcgiwrap",
-    ]
-
-    def publish_as_relay_image(self):
-        if self.incus.find_image([RELAY_IMAGE_ALIAS]):
-            return
-        self.out.print(
-            f"  Locally caching {self.name!r} as '{RELAY_IMAGE_ALIAS}' image ..."
-        )
-        units = " ".join(f"{s}.service" for s in self._CACHED_DISABLE_SERVICES)
-        self.bash("cp /etc/resolv.conf /tmp/resolv.conf.bak")
-        self.bash(f"systemctl disable --now {units}")
-        self.bash("rm -f /etc/resolv.conf")
-        self.incus.run(
-            ["publish", self.name, f"--alias={RELAY_IMAGE_ALIAS}", "--force"]
-        )
-        # Restore DNS and re-enable services on the running container
-        self.bash("cp /tmp/resolv.conf.bak /etc/resolv.conf")
-        self.bash(f"systemctl enable --now {units}")
-        self.wait_ready()
-        self.out.print(f"  Relay image '{RELAY_IMAGE_ALIAS}' ready.")
 
     def verify_ssh(self, ssh_config):
         cmd = ["ssh", "-F", str(ssh_config), "-o", "ConnectTimeout=60"]
@@ -678,22 +713,21 @@ class ContainerBuilder(Container):
     def setup_repo(self, dest, out, source):
         name = dest.rsplit("/", 1)[-1]
         self.bash(f"rm -rf {dest}")
+        out.print(f"  Preparing {name} from {source.description} ...")
         if source.kind == "local":
-            out.print(f"  Syncing {name} from {source.path} ...")
             self.sync_to(source.path, dest)
         else:
-            out.print(f"  Cloning {name} ({source.ref}) ...")
             self.bash(f"git clone --depth=1 -b {source.ref} {source.url} {dest}")
         self.bash(f"git config --global --add safe.directory {dest}")
 
-    def install_relay_deps(self):
-        self.bash("""
-            if [ ! -d /root/cmdeploy-venv ]; then
-                python3 -m venv /root/cmdeploy-venv
+    def install_relay_deps(self, repo_path, venv_path):
+        self.bash(f"""
+            if [ ! -d {venv_path} ]; then
+                python3 -m venv {venv_path}
             fi
-            /root/cmdeploy-venv/bin/pip install \
-                -e /root/relay/chatmaild \
-                -e /root/relay/cmdeploy
+            {venv_path}/bin/pip install \
+                -e {repo_path}/chatmaild \
+                -e {repo_path}/cmdeploy
         """)
 
     def sync_mini_tests(self, test_dir):
@@ -746,7 +780,7 @@ SSHEOF
             chmod 600 /root/.ssh/config
         """)
 
-    def run_cmdeploy_tests(self, pytest_args, out, env=None):
+    def run_cmdeploy_tests(self, repo_path, venv_path, pytest_args, out, env=None):
         env_exports = "export CHATMAIL_INI=/root/chatmail.ini"
         for k, v in (env or {}).items():
             env_exports += f" && export {k}={v}"
@@ -755,8 +789,8 @@ SSHEOF
             f"incus exec {self.name} --"
             f" bash -c '"
             f"{env_exports} &&"
-            f" source /root/cmdeploy-venv/bin/activate &&"
-            f" cd /root/relay &&"
+            f" source {venv_path}/bin/activate &&"
+            f" cd {repo_path} &&"
             f" pytest cmdeploy/src/ -n4 -rs -x -v --durations=5 {args_str}'"
         )
         return out.shell(cmd)

@@ -61,7 +61,7 @@ def test_init():
     bld_ct = ix.get_container(BUILDER_CONTAINER_NAME)
     if dns_ct.is_running and bld_ct.is_running and ix.find_image([BASE_IMAGE_ALIAS]):
         pytest.skip("already initialized")
-    cmlxc("init", "--cmdeploy", "@main", "--madmail", "@main")
+    cmlxc("init")
 
 
 def test_status():
@@ -72,7 +72,7 @@ def test_status():
 
 
 def test_cm_deploy():
-    cmlxc("deploy-cmdeploy", CT0, CT1)
+    cmlxc("deploy-cmdeploy", "--source", "@main", CT0, CT1)
 
 
 def test_mini_cmdeploy():
@@ -98,7 +98,7 @@ def test_destroy():
 
 
 def test_mad_deploy():
-    cmlxc("deploy-madmail", "--ipv4-only", CT0)
+    cmlxc("deploy-madmail", "--source", "@main", "--ipv4-only", CT0)
 
 
 def test_mini_madmail():

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from cmlxc.cli import SourceSpec, parse_source
+from cmlxc.driver_base import SourceSpec, parse_source
 
 URL = "https://github.com/chatmail/relay.git"
 

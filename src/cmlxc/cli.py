@@ -5,13 +5,14 @@ Standard workflow: init -> deploy-cmdeploy/deploy-madmail -> test-cmdeploy/test-
 
 import argparse
 import subprocess
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 import argcomplete
 
-from cmlxc import driver_cmdeploy, driver_madmail
+from cmlxc import driver_cmdeploy
+from cmlxc.driver_base import SourceSpec, parse_source  # noqa: F401 (re-export)
+from cmlxc.driver_cmdeploy import CmdeployDriver
+from cmlxc.driver_madmail import MadmailDriver
 from cmlxc.incus import (
     BASE_IMAGE_ALIAS,
     BUILDER_CONTAINER_NAME,
@@ -19,42 +20,11 @@ from cmlxc.incus import (
     DNS_CONTAINER_NAME,
     MADMAIL,
     ContainerBuilder,
-    DeployConflictError,
     Incus,
     RelayContainer,
     _is_ip_address,
 )
 from cmlxc.output import Out
-
-
-@dataclass
-class SourceSpec:
-    """Parsed SOURCE argument for init --cmdeploy / --madmail."""
-
-    kind: Literal["remote", "local"]
-    url: str | None = None
-    ref: str | None = None
-    path: Path | None = None
-
-
-def parse_source(value: str, default_url: str) -> SourceSpec:
-    """Turn a SOURCE string into a typed spec.
-
-    Accepted forms:
-      @ref           -- branch/tag on the default remote
-      /path or ./path -- local directory
-      URL@ref        -- custom remote at a given ref
-    """
-    if value.startswith(("/", ".")):
-        return SourceSpec("local", path=Path(value))
-    if value.startswith("@"):
-        return SourceSpec("remote", url=default_url, ref=value[1:])
-    if "://" in value:
-        url, _, ref = value.rpartition("@")
-        if not url:
-            raise ValueError(f"Invalid SOURCE: {value!r}")
-        return SourceSpec("remote", url=url, ref=ref)
-    raise ValueError(f"Invalid SOURCE: {value!r}. Use @ref, /path, ./path, or URL@ref.")
 
 
 def _container_completer(prefix, **kwargs):
@@ -112,28 +82,20 @@ def _destroy_relays(ix, out):
 
 def init_cmd_options(parser):
     parser.add_argument(
-        "--cmdeploy",
-        dest="cmdeploy_source",
-        default=None,
-        metavar="SOURCE",
-        help="Prepare cmdeploy driver. SOURCE: @ref, /path, ./path, or URL@ref.",
-    )
-    parser.add_argument(
-        "--madmail",
-        dest="madmail_source",
-        default=None,
-        metavar="SOURCE",
-        help="Prepare madmail driver. SOURCE: @ref, /path, ./path, or URL@ref.",
+        "--reset",
+        action="store_true",
+        help="Destroy everything (DNS, builder, images) before re-initializing.",
     )
 
 
 def init_cmd(args, out):
     """Initialize the environment (base image, DNS, builder container)."""
-    if not args.cmdeploy_source and not args.madmail_source:
-        out.red("Error: specify --cmdeploy SOURCE and/or --madmail SOURCE.")
-        return 1
-
     ix = Incus(out)
+
+    if args.reset:
+        with out.section("Full reset"):
+            _destroy_all(ix, out)
+
     with out.section("Initializing cmlxc environment"):
         out.green(f"Ensuring {BASE_IMAGE_ALIAS} image ...")
         ix.ensure_base_image()
@@ -156,20 +118,6 @@ def init_cmd(args, out):
         test_dir = Path(__file__).parents[1] / "relay_minitest"
         bld_ct.sync_mini_tests(test_dir)
 
-        if args.cmdeploy_source:
-            cm_src = parse_source(
-                args.cmdeploy_source,
-                driver_cmdeploy.RELAY_REPO_URL,
-            )
-            driver_cmdeploy.init_builder(bld_ct, out, source=cm_src)
-
-        if args.madmail_source:
-            mm_src = parse_source(
-                args.madmail_source,
-                driver_madmail.MADMAIL_REPO_URL,
-            )
-            driver_madmail.init_builder(bld_ct, out, source=mm_src)
-
         out.green(f"{BUILDER_CONTAINER_NAME} container ready.")
 
 
@@ -184,15 +132,15 @@ def _confirm_relays_running(ix, names, out):
 
 
 def _confirm_cmdeploy_deployed(ct, out):
-    state = ct.get_deploy_state()
-    if state is None:
+    driver = ct.driver
+    if driver is None:
         out.red(f"Container {ct.sname!r} has not been deployed.")
         out.print("Run 'cmlxc deploy-cmdeploy <name>' first.")
         return False
-    if state["driver"] != CMDEPLOY:
+    if driver != CMDEPLOY:
         out.red(
             f"Container {ct.sname!r} was deployed with"
-            f" {state['driver']!r}, not cmdeploy."
+            f" {driver!r}, not cmdeploy."
         )
         out.print("cmdeploy-test only supports cmdeploy-deployed relays.")
         return False
@@ -206,155 +154,6 @@ def _get_running_builder(ix, out):
         out.red("Run 'cmlxc init' first.")
         return None
     return bld_ct
-
-
-# -------------------------------------------------------------------
-# shared container-start helper
-# -------------------------------------------------------------------
-
-
-def _ensure_relay_containers(names, ix, out, ipv4_only=False, image_preference=None):
-    dns_ct = ix.get_container(DNS_CONTAINER_NAME)
-    dns_ct.wait_ready(timeout=5)
-    sub = out.new_prefixed_out()
-    sub.print(f"DNS container IP: {dns_ct.ipv4}")
-
-    relays = [ix.get_container(n) for n in names]
-    for ct in relays:
-        out.green(f"Ensuring container {ct.name!r} ({ct.domain}) ...")
-        ct.ensure(
-            ipv4_only=ipv4_only,
-            image_preference=image_preference,
-        )
-
-        sub.print("Configuring container hostname ...")
-        ct.bash(f"echo '{ct.name}' > /etc/hostname")
-        sub.print(f"IPv4 {ct.ipv4}, IPv6 {ct.ipv6}")
-
-        sub.green(f"Container {ct.name!r} ready: {ct.domain} -> {ct.ipv4}")
-        out.print()
-
-    # Generate the unified SSH config
-    out.green("Writing ssh-config ...")
-    ssh_cfg = ix.write_ssh_config()
-    sub.print(f"{ssh_cfg}")
-
-    # Verify SSH via the generated config
-    for ct in relays:
-        sub.print(f"Verifying SSH to {ct.name} via ssh-config ...")
-        if ct.verify_ssh(ssh_cfg):
-            sub.print(f"SSH OK: ssh -F {ix.ssh_config_path} {ct.domain}")
-        else:
-            sub.red(f"WARNING: SSH verification failed for {ct.name}")
-
-    # Print integration suggestions
-    ssh_cfg = ix.ssh_config_path
-    if not ix.check_ssh_include():
-        sub.green(
-            "\n(Optional) To use containers from any SSH client, add to ~/.ssh/config:"
-        )
-        sub.green(f"    Include {ssh_cfg}")
-
-    return relays
-
-
-# -------------------------------------------------------------------
-# deploy-cmdeploy
-# -------------------------------------------------------------------
-
-
-def deploy_cmdeploy_cmd_options(parser):
-    parser.add_argument(
-        "names",
-        nargs="+",
-        metavar="NAME",
-        help="One or more relay names (e.g. cm0 cm1).",
-    ).completer = _container_completer
-    parser.add_argument(
-        "--ipv4-only",
-        dest="ipv4_only",
-        action="store_true",
-        help="Create containers without IPv6 connectivity.",
-    )
-
-
-def deploy_cmdeploy_cmd(args, out):
-    """Deploy a cmdeploy relay into a container."""
-    ix = Incus(out)
-    if not _check_init(ix, out):
-        return 1
-
-    bld_ct = _get_running_builder(ix, out)
-    if not bld_ct:
-        return 1
-
-    try:
-        for name in args.names:
-            with out.section(f"Preparing container setup: {name}"):
-                _ensure_relay_containers(
-                    [name],
-                    ix,
-                    out,
-                    ipv4_only=args.ipv4_only,
-                )
-            ret = driver_cmdeploy.deploy([name], ix, out, bld_ct)
-            if ret:
-                return ret
-        return 0
-    except DeployConflictError as exc:
-        out.red(f"Deploy conflict: {exc}")
-        return 1
-
-
-# -------------------------------------------------------------------
-# deploy-madmail
-# -------------------------------------------------------------------
-
-
-def deploy_madmail_cmd_options(parser):
-    parser.add_argument(
-        "names",
-        nargs="+",
-        metavar="NAME",
-        help="One or more relay names (e.g. mad0 mad1).",
-    ).completer = _container_completer
-    parser.add_argument(
-        "--ipv4-only",
-        dest="ipv4_only",
-        action="store_true",
-        help="Create containers without IPv6 connectivity.",
-    )
-
-
-def deploy_madmail_cmd(args, out):
-    """Deploy a madmail relay service into a container."""
-    ix = Incus(out)
-    if not _check_init(ix, out):
-        return 1
-
-    bld_ct = _get_running_builder(ix, out)
-    if not bld_ct:
-        return 1
-
-    with out.section("Preparing container setup"):
-        _ensure_relay_containers(
-            args.names,
-            ix,
-            out,
-            ipv4_only=args.ipv4_only,
-            image_preference="base",
-        )
-
-    try:
-        return driver_madmail.deploy(
-            args.names,
-            ix,
-            out,
-            bld_ct,
-        )
-    except DeployConflictError as exc:
-        out.red(f"Deploy conflict: {exc}")
-        return 1
 
 
 # -------------------------------------------------------------------
@@ -429,32 +228,20 @@ def destroy_cmd_options(parser):
         action="store_true",
         help="Destroy all relay containers (keeps DNS, builder, images).",
     )
-    parser.add_argument(
-        "--reset",
-        dest="reset",
-        action="store_true",
-        help="Destroy everything including DNS, builder, and images. "
-        "Requires 'cmlxc init' afterwards.",
-    )
 
 
 def destroy_cmd(args, out):
     """Stop and delete containers."""
     ix = Incus(out)
 
-    if args.reset:
-        _destroy_all(ix, out)
-        ix.write_ssh_config()
-        out.green("Full reset complete. Run 'cmlxc init' to reinitialize.")
-        return 0
-    elif args.destroy_all:
+    if args.destroy_all:
         _destroy_relays(ix, out)
     elif args.names:
         for ct in map(ix.get_container, args.names):
             out.green(f"Destroying container {ct.name!r} ...")
             ct.destroy()
     else:
-        out.red("Error: specify container name(s), --all, or --reset.")
+        out.red("Error: specify container name(s) or --all.")
         return 1
 
     ix.write_ssh_config()
@@ -536,8 +323,13 @@ def test_cmdeploy_cmd(args, out):
                         return 1
 
         out.print(f"Running cmdeploy tests against {first_ct.domain} ...")
-
-        ret = bld_ct.run_cmdeploy_tests(pytest_args, out, env=env)
+        ret = bld_ct.run_cmdeploy_tests(
+            first_ct.get_repo_path(),
+            first_ct.get_venv_path(),
+            pytest_args,
+            out,
+            env=env,
+        )
         if ret:
             out.red(f"test-cmdeploy failed (exit {ret})")
             return ret
@@ -560,12 +352,12 @@ def _resolve_relay_addr(name, ix, out):
         out.red(f"Container {ct.name!r} is not running.")
         return None
 
-    state = ct.get_deploy_state()
-    if state is None:
+    driver = ct.driver
+    if driver is None:
         out.red(f"Container {ct.sname!r} has not been deployed.")
         return None
 
-    if state["driver"] == MADMAIL:
+    if driver == MADMAIL:
         if not ct.ipv4:
             ct.wait_ready()
         return ct.ipv4
@@ -678,10 +470,8 @@ def status_cmd(args, out):
 def _deploy_state_label(ct):
     if not isinstance(ct, RelayContainer):
         return ""
-    state = ct.get_deploy_state()
-    if state is None:
-        return "undeployed"
-    return state["driver"]
+    driver = ct.driver
+    return driver if driver else "undeployed"
 
 
 def _print_container_status(out, c, ix):
@@ -710,26 +500,27 @@ def _print_container_status(out, c, ix):
 
 def _print_builder_repos(out, ct):
     try:
-        for name, path in [("relay", "/root/relay"), ("madmail", "/root/madmail")]:
+        # Templates
+        for name in ["cmdeploy", "madmail"]:
+            path = f"/root/{name}-template"
             if ct.bash(f"test -d {path}", check=False) is None:
-                out.print(f"{name}: not installed")
                 continue
             commit = ct.bash(
                 f"cd {path} && git log --oneline -1 --no-decorate",
                 check=False,
             )
             if commit:
-                out.print(f"{name}: {commit.strip()}")
+                out.print(f"{name} template: {commit.strip()}")
             else:
-                out.print(f"{name}: synced from host")
+                out.print(f"{name} template: synced from host")
 
+        # Binary
         has_binary = (
-            ct.bash("test -x /root/madmail/build/maddy", check=False) is not None
+            ct.bash("test -f /root/madmail-template/build/maddy", check=False)
+            is not None
         )
         if has_binary:
             out.green("maddy: built")
-        else:
-            out.red("maddy: not built")
     except Exception:
         out.print("repos: (unavailable)")
 
@@ -786,8 +577,6 @@ def _print_dns_forwarding_status(out, dns_ip):
 
 SUBCOMMANDS = [
     ("init", init_cmd, init_cmd_options),
-    ("deploy-cmdeploy", deploy_cmdeploy_cmd, deploy_cmdeploy_cmd_options),
-    ("deploy-madmail", deploy_madmail_cmd, deploy_madmail_cmd_options),
     ("test-cmdeploy", test_cmdeploy_cmd, test_cmdeploy_cmd_options),
     ("test-mini", test_mini_cmd, test_mini_cmd_options),
     ("status", status_cmd, status_cmd_options),
@@ -795,6 +584,23 @@ SUBCOMMANDS = [
     ("stop", stop_cmd, stop_cmd_options),
     ("destroy", destroy_cmd, destroy_cmd_options),
 ]
+
+DEPLOY_DRIVERS = [CmdeployDriver, MadmailDriver]
+
+
+def _add_subcommand(subparsers, name, func, addopts, shared):
+    """Register a single subcommand on *subparsers*."""
+    doc = func.__doc__.strip()
+    help_text = doc.split("\n")[0].strip(".")
+    p = subparsers.add_parser(
+        name,
+        description=doc,
+        help=help_text,
+        parents=[shared],
+    )
+    p.set_defaults(func=func)
+    if addopts is not None:
+        addopts(p)
 
 
 def get_parser():
@@ -817,18 +623,21 @@ def get_parser():
     parser.set_defaults(func=None)
 
     subparsers = parser.add_subparsers(title="subcommands")
-    for name, func, addopts in SUBCOMMANDS:
-        doc = func.__doc__.strip()
-        help_text = doc.split("\n")[0].strip(".")
-        p = subparsers.add_parser(
-            name,
-            description=doc,
-            help=help_text,
-            parents=[shared],
+
+    # init
+    _add_subcommand(subparsers, *SUBCOMMANDS[0], shared)
+
+    # Deploy subcommands (self-registered by driver classes)
+    for drv in DEPLOY_DRIVERS:
+        drv.add_subcommand(
+            subparsers,
+            shared,
+            completer=_container_completer,
         )
-        p.set_defaults(func=func)
-        if addopts is not None:
-            addopts(p)
+
+    # Remaining static subcommands (test, status, lifecycle)
+    for name, func, addopts in SUBCOMMANDS[1:]:
+        _add_subcommand(subparsers, name, func, addopts, shared)
 
     return parser
 
