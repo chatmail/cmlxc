@@ -1,10 +1,21 @@
 # Changelog
 
+## [0.7.3] - 2026-04-13
+
+### Features / Changes
+
+- cli: add --version option and show version in help string.
+- cli: show version at top of deploy and test command output.
+
 ## [0.7.2] - 2026-04-13
 
 ### CI
 
 - releases run tests, and PRs runs tests..
+
+### Miscellaneous Tasks
+
+- release v0.7.2.
 
 ## [0.7.1] - 2026-04-13
 
@@ -101,6 +112,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.7.3]: https://github.com/chatmail/cmlxc/compare/v0.7.2..v0.7.3
 [0.7.2]: https://github.com/chatmail/cmlxc/compare/v0.7.1..v0.7.2
 [0.7.1]: https://github.com/chatmail/cmlxc/compare/v0.7.0..v0.7.1
 [0.7.0]: https://github.com/chatmail/cmlxc/compare/v0.6.4..v0.7.0
