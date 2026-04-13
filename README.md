@@ -2,17 +2,17 @@
 
 Manage local [Incus](https://linuxcontainers.org/incus/) containers for
 chatmail relay development and testing.
-`cmlxc` spins up lightweight LXC containers, deploys chatmail relay
-services into them via `cmdeploy` or `madmail`, and runs integration
-tests -- all without touching the host system.  
+`cmlxc` spins up lightweight LXC containers,
+deploys chatmail relay services into them via `cmdeploy` or `madmail`,
+and runs integration tests -- all without touching the host system.
 See [Architecture](#architecture) for more internal details.
 
 
 ## Prerequisites
 
 [Incus](https://linuxcontainers.org/incus/) installed and configured on the host.
-Usually only being part of the "incus" group is necessary, as containers
-can run with user privileges.
+Usually only being part of the "incus" group is necessary,
+as containers can run with user privileges.
 
 
 ## Installation
@@ -138,8 +138,8 @@ Provides `.localchat` DNS resolution so containers can reach each other by name.
 
 
 **Builder container** (`builder-localchat`) -- the central workhorse.
-Holds repository checkouts (`/root/relay`, `/root/madmail`), Python
-virtualenvs for `cmdeploy` and mini-tests, and the compiled `maddy` binary.
+Holds repository templates and per-relay checkouts,
+Python virtualenvs for `cmdeploy` and mini-tests, and the compiled `maddy` binary.
 All deployment and test operations are executed *inside* the builder --
 the host only needs `cmlxc` itself.
 
@@ -153,7 +153,7 @@ Each relay is locked to a single deployment driver (`cmdeploy` or
 ### Deployment drivers
 
 Drivers live in `driver_cmdeploy.py` and `driver_madmail.py`.
-Each driver module is exports its CLI subcommand metadata,
+Each driver module exports its CLI subcommand metadata,
 builder init, and deploy orchestration.
 `cli.py` generates the `deploy-*` subcommands from a `DEPLOY_DRIVERS` list.
 
@@ -163,7 +163,6 @@ builder init, and deploy orchestration.
   Generates DNS zones, loads them into PowerDNS, and verifies records.
   After the first successful deploy the relay image is cached as
   `localchat-cmdeploy` so subsequent containers start pre-populated.
-
 
 - **madmail** -- builds the `maddy` Go binary inside the builder,
   pushes it via SCP and runs `madmail install --simple --ip <IP>`.
