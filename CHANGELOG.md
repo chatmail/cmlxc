@@ -1,10 +1,18 @@
 # Changelog
 
+## [0.7.2] - 2026-04-13
+
+### CI
+
+- releases run tests, and PRs runs tests..
+
 ## [0.7.1] - 2026-04-13
 
 ### Miscellaneous Tasks
 
 - revise automatic releasing to avoid amending local commits.
+- release v0.7.1.
+- release v0.7.1.
 
 ## [0.7.0] - 2026-04-13
 
@@ -93,6 +101,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.7.2]: https://github.com/chatmail/cmlxc/compare/v0.7.1..v0.7.2
 [0.7.1]: https://github.com/chatmail/cmlxc/compare/v0.7.0..v0.7.1
 [0.7.0]: https://github.com/chatmail/cmlxc/compare/v0.6.4..v0.7.0
 [0.6.4]: https://github.com/chatmail/cmlxc/compare/v0.6.3..v0.6.4
