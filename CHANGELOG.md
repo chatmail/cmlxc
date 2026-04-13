@@ -2,50 +2,43 @@
 
 ## [0.7.0] - 2026-04-13
 
-### Documentation
+### Refactor
 
-- reformat README and add release automation script.
+- [**breaking**] cli: shift driver specific CLI handling to driver modules.
 
 ### Features / Changes
 
 - better per-relay status, and generally more exact references in the output.
 - remove all per-container state, and put it into the build container instead.
 - move host setup instructions behind 'status --host', revise output.
+- make_new_release.py checks for proper git state.
 
 ### Fixes
 
+- gate release on test suite, add skip-existing to PyPI publish.
 - reusable workflow caching.
 - add missing driver_base.py file.
 - allow concurrent cmlxc runs, and prevent conflicts on ssh-config manipulations, allow drivers to participate in builder container preparation.
 
 ### Miscellaneous Tasks
 
+- upgrade action dependencies for Node 24.
+- upgrade action dependencies for Node 24.
 - improve release script to also first run tests.
 - reduce number of printed references, fix DNS issues.
-
-### Refactor
-
-- [**breaking**] cli: shift driver specific CLI handling to driver modules.
-
-## [0.6.7] - 2026-04-12
 
 ### CI
 
 - skip image export on cache hit in lxc-test.
 
+### Documentation
+
+- reformat README and add release automation script.
+
 ### Other
 
 - reorder README.
 
-## [0.6.6] - 2026-04-12
-
-### Fixes
-
-- gate release on test suite, add skip-existing to PyPI publish.
-
-### Miscellaneous Tasks
-
-- upgrade action dependencies for Node 24.
 
 ## [0.6.4] - 2026-04-12
 
@@ -94,9 +87,7 @@
 
 - initial commit of cmlxc tool.
 
-[0.7.0]: https://github.com/chatmail/cmlxc/compare/v0.6.7..v0.7.0
-[0.6.7]: https://github.com/chatmail/cmlxc/compare/v0.6.6..v0.6.7
-[0.6.6]: https://github.com/chatmail/cmlxc/compare/v0.6.4..v0.6.6
+[0.7.0]: https://github.com/chatmail/cmlxc/compare/v0.6.4..v0.7.0
 [0.6.4]: https://github.com/chatmail/cmlxc/compare/v0.6.3..v0.6.4
 [0.6.3]: https://github.com/chatmail/cmlxc/compare/v0.5.0..v0.6.3
 
