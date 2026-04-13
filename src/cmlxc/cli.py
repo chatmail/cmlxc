@@ -5,19 +5,16 @@ Standard workflow: init -> deploy-cmdeploy/deploy-madmail -> test-cmdeploy/test-
 
 import argparse
 import subprocess
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import argcomplete
 
-try:
-    __version__ = version("cmlxc")
-except PackageNotFoundError:
-    __version__ = "unknown"
-
-
 from cmlxc import driver_cmdeploy
-from cmlxc.driver_base import SourceSpec, parse_source  # noqa: F401 (re-export)
+from cmlxc.driver_base import (  # noqa: F401 (re-export)
+    SourceSpec,
+    __version__,
+    parse_source,
+)
 from cmlxc.driver_cmdeploy import CmdeployDriver
 from cmlxc.driver_madmail import MadmailDriver
 from cmlxc.incus import (
@@ -269,6 +266,7 @@ def test_cmdeploy_cmd_options(parser):
 
 def test_cmdeploy_cmd(args, out):
     """Run cmdeploy integration tests inside the builder container."""
+    out.print(f"cmlxc {__version__}")
     ix = Incus(out)
     if not _check_init(ix, out):
         return 1
@@ -377,6 +375,7 @@ def test_mini_cmd_options(parser):
 
 def test_mini_cmd(args, out):
     """Run mini-test integration tests inside the builder container."""
+    out.print(f"cmlxc {__version__}")
     ix = Incus(out)
     if not _check_init(ix, out):
         return 1
@@ -650,9 +649,7 @@ def get_parser():
         description=f"cmlxc {__version__} -- Manage local Incus/LXC containers for chatmail relay testing.",
         parents=[shared],
     )
-    parser.add_argument(
-        "--version", action="version", version=f"{__version__}"
-    )
+    parser.add_argument("--version", action="version", version=f"{__version__}")
     parser.set_defaults(func=None)
 
     subparsers = parser.add_subparsers(title="subcommands")
