@@ -5,9 +5,16 @@ Standard workflow: init -> deploy-cmdeploy/deploy-madmail -> test-cmdeploy/test-
 
 import argparse
 import subprocess
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import argcomplete
+
+try:
+    __version__ = version("cmlxc")
+except PackageNotFoundError:
+    __version__ = "unknown"
+
 
 from cmlxc import driver_cmdeploy
 from cmlxc.driver_base import SourceSpec, parse_source  # noqa: F401 (re-export)
@@ -640,8 +647,11 @@ def get_parser():
 
     parser = argparse.ArgumentParser(
         prog="cmlxc",
-        description=("Manage local Incus/LXC containers for chatmail relay testing."),
+        description=f"cmlxc {__version__} -- Manage local Incus/LXC containers for chatmail relay testing.",
         parents=[shared],
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"{__version__}"
     )
     parser.set_defaults(func=None)
 
