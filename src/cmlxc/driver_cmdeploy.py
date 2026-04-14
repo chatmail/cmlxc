@@ -36,28 +36,28 @@ class CmdeployDriver(Driver):
     ]
 
     def prep_builder(self, bld_ct, source=None):
-        """Perform one-time global preparation (toolchains, default checkouts)."""
+        """Check out the source into the template directory (no venv)."""
         if source is None:
             source = parse_source("@main", self.DEFAULT_SOURCE_URL)
 
         tmp_dest = f"/root/{self.REPO_NAME}-template"
         bld_ct.setup_repo(tmp_dest, self.out, source)
 
-        self.out.print("  Installing cmdeploy/chatmaild in template venv ...")
-        prepare_build_container(bld_ct, tmp_dest, f"{tmp_dest}/venv")
-
     def init_builder(self, bld_ct, source, names):
-        """Set up the cmdeploy checkout and install deps for each relay."""
+        """Copy the template checkout per relay and create a fresh venv."""
         tmp_dest = f"/root/{self.REPO_NAME}-template"
         self.prep_builder(bld_ct, source=source)
 
         for name in names:
             ct = self.ix.get_container(name)
             repo_path = ct.get_repo_path(self.REPO_NAME)
-            ct.get_venv_path(self.REPO_NAME)
+            venv_path = ct.get_venv_path(self.REPO_NAME)
 
             self.out.print(f"  Setting up {repo_path} ...")
             bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
+
+            self.out.print(f"  Installing cmdeploy/chatmaild in {repo_path} ...")
+            prepare_build_container(bld_ct, repo_path, venv_path)
 
     def run_deploy(self, names, bld_ct, *, source, ipv4_only=False):
         """Ensure relay containers and deploy cmdeploy."""
@@ -243,11 +243,9 @@ def write_ini(builder_ct, ct, disable_ipv6=False):
 
 
 def prepare_build_container(bld_ct, repo_path, venv_path):
-    """Install chatmaild/cmdeploy into a venv on the builder."""
+    """Install chatmaild/cmdeploy into a fresh venv on the builder."""
     bld_ct.bash(f"""
-        if [ ! -d {venv_path} ]; then
-            python3 -m venv {venv_path}
-        fi
+        python3 -m venv {venv_path}
         {venv_path}/bin/pip install \
             -e {repo_path}/chatmaild \
             -e {repo_path}/cmdeploy

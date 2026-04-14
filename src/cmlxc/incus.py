@@ -726,8 +726,11 @@ class ContainerBuilder(Container):
 
         lpath = shlex.quote(str(local_path))
         rpath = shlex.quote(str(remote_path))
+        excludes = " ".join(
+            f"--exclude='{d}'" for d in ["venv", ".tox", "__pycache__", ".ruff_cache"]
+        )
         cmd = (
-            f"tar -C {lpath} -cf - . | "
+            f"tar -C {lpath} {excludes} -cf - . | "
             f"incus --quiet exec {self.name} -- tar -C {rpath} -xf -"
         )
 
