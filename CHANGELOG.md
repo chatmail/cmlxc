@@ -1,11 +1,29 @@
 # Changelog
 
+## [0.7.5] - 2026-04-14
+
+### Documentation
+
+- add note to README on Zabbly Incus and refactor init preparation
+
+### Fixes
+
+- make --source PATH cmdeploy work: create venv per relay instead of in template
+
+- validate relay names to reject path-like arguments, and validate --source local paths.
+
+- use relay's scripts/initenv.sh for venv setup instead of custom venv and install commands.
+
 ## [0.7.4] - 2026-04-13
 
 ### Fixes
 
 - incus: make launching of base setup image more robust and force labeling.
 - doc: add note about possible incus failures.
+
+### Miscellaneous Tasks
+
+- release v0.7.4.
 
 ### Other
 
@@ -127,6 +145,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.7.5]: https://github.com/chatmail/cmlxc/compare/v0.7.4..v0.7.5
 [0.7.4]: https://github.com/chatmail/cmlxc/compare/v0.7.3..v0.7.4
 [0.7.3]: https://github.com/chatmail/cmlxc/compare/v0.7.2..v0.7.3
 [0.7.2]: https://github.com/chatmail/cmlxc/compare/v0.7.1..v0.7.2
