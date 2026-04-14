@@ -53,10 +53,10 @@ class CmdeployDriver(Driver):
             ct = self.ix.get_container(name)
             repo_path = ct.get_repo_path(self.REPO_NAME)
 
-            self.out.print(f"  Setting up {repo_path} ...")
+            self.out.print(f"  Preparing {name} checkout ...")
             bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
 
-            self.out.print(f"  Installing cmdeploy/chatmaild in {repo_path} ...")
+            self.out.print(f"  Running scripts/initenv.sh for {name} ...")
             prepare_build_container(bld_ct, repo_path)
 
     def run_deploy(self, names, bld_ct, *, source, ipv4_only=False):
@@ -97,7 +97,7 @@ class CmdeployDriver(Driver):
         with out.section("Preparing DNS configuration"):
             sub = out.new_prefixed_out()
             for ct in relays:
-                sub.print(f"Configuring DNS in {ct.name} ...")
+                sub.print(f"Configuring DNS for {ct.sname} ...")
                 ct.configure_dns(dns_ct.ipv4)
 
         # Deploy chatmail on each relay
@@ -120,11 +120,11 @@ class CmdeployDriver(Driver):
                     return ret
 
                 # cmdeploy appends 9.9.9.9 to resolv.conf; restore clean state
-                out.print(f"Re-configuring DNS in {ct.name} ...")
+                out.print(f"Re-configuring DNS for {ct.sname} ...")
                 ct.configure_dns(dns_ct.ipv4)
 
             # Generate DNS zone files and load into PowerDNS
-            with out.section(f"loading DNS zone: {ct.name}"):
+            with out.section(f"Loading DNS zone: {ct.sname}"):
                 repo_path = ct.get_repo_path(self.REPO_NAME)
                 zone_path = f"{repo_path}/chatmail.zone"
                 ret = self._run_cmdeploy(
@@ -145,15 +145,15 @@ class CmdeployDriver(Driver):
                 else:
                     out.red(f"  Empty zone file for {ct.sname}")
 
-            out.print(f"Restarting filtermail-incoming on {ct.name} ...")
+            out.print(f"Restarting filtermail-incoming on {ct.sname} ...")
             ct.bash("systemctl restart filtermail-incoming")
 
             if not ix.find_image([self.IMAGE_ALIAS]):
-                with out.section(f"deploy: caching {self.IMAGE_ALIAS} image"):
+                with out.section(f"Caching {self.IMAGE_ALIAS} image"):
                     self._publish_image(ct)
 
         # Final DNS verification
-        with out.section("verifying DNS records"):
+        with out.section("Verifying DNS records"):
             for ct in relays:
                 ret = self._run_cmdeploy(builder_ct, ct, "dns")
                 if ret:
