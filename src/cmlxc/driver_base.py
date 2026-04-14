@@ -6,6 +6,7 @@ drivers via the ``DEPLOY_DRIVERS`` list and generates
 subcommands automatically.
 """
 
+import re
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -61,6 +62,19 @@ def parse_source(value: str, default_url: str) -> SourceSpec:
     raise ValueError(f"Invalid SOURCE: {value!r}. Use @ref, /path, ./path, or URL@ref.")
 
 
+_RELAY_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
+
+
+def validate_relay_name(name):
+    """Raise ``ValueError`` if *name* is not a valid relay name."""
+    if not _RELAY_NAME_RE.match(name):
+        raise ValueError(
+            f"Invalid relay name {name!r}."
+            " Names must be alphanumeric (hyphens allowed)."
+            " Did you mean '--source'?"
+        )
+
+
 class Driver:
     """Base for deployment drivers.
 
@@ -74,6 +88,7 @@ class Driver:
     REPO_NAME: str
     IMAGE_ALIAS: str | None = None
     NAME_EXAMPLES: str = "r0 r1"
+    REQUIRED_SOURCE_PATHS: list[str] = []
 
     def __init__(self, ix, out):
         self.ix = ix
@@ -139,6 +154,24 @@ class Driver:
     # Deploy protocol (override in subclasses)
     # ------------------------------------------------------------------
 
+    def check_local_source(self, source):
+        """Verify that a local source path looks like a valid checkout."""
+        if source.kind != "local":
+            return True
+        path = source.path
+        if not path.is_dir():
+            self.out.red(f"Error: --source {path} is not a directory.")
+            return False
+        missing = [p for p in self.REQUIRED_SOURCE_PATHS if not (path / p).exists()]
+        if missing:
+            self.out.red(
+                f"Error: --source {path} does not look like"
+                f" a {self.REPO_NAME} checkout."
+            )
+            self.out.red(f"  Missing: {', '.join(missing)}")
+            return False
+        return True
+
     def init_builder(self, bld_ct, source, names):
         """Prepare the builder container for this driver and these relays."""
         raise NotImplementedError
@@ -160,6 +193,13 @@ class Driver:
         """Build the CLI command function for this driver."""
 
         def cmd(args, out):
+            try:
+                for name in args.names:
+                    validate_relay_name(name)
+            except ValueError as exc:
+                out.red(str(exc))
+                return 1
+
             driver = cls(Incus(out), out)
             if not driver.check_init():
                 return 1
@@ -169,6 +209,9 @@ class Driver:
                 return 1
 
             source = parse_source(args.source, cls.DEFAULT_SOURCE_URL)
+            if not driver.check_local_source(source):
+                return 1
+
             out.print(f"cmlxc {__version__}")
             with out.section(f"Preparing {cls.CLI_NAME} source in builder"):
                 out.print(f"  Source: {source.description}")

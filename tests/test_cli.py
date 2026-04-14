@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from cmlxc.driver_base import SourceSpec, parse_source
+from cmlxc.driver_base import SourceSpec, parse_source, validate_relay_name
 
 URL = "https://github.com/chatmail/relay.git"
 
@@ -34,3 +34,14 @@ def test_parse_source(value, expected):
 def test_parse_source_rejects_invalid(value):
     with pytest.raises(ValueError, match="Invalid SOURCE"):
         parse_source(value, URL)
+
+
+@pytest.mark.parametrize("bad", [".", "..", "../relay", "/path", "a/b", "a.b"])
+def test_validate_relay_name_rejects_invalid(bad):
+    with pytest.raises(ValueError, match="Invalid relay name"):
+        validate_relay_name(bad)
+
+
+@pytest.mark.parametrize("good", ["cm0", "relay-1", "t0", "mad2-noinsecure"])
+def test_validate_relay_name_accepts_valid(good):
+    validate_relay_name(good)

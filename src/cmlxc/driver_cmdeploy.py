@@ -23,6 +23,7 @@ class CmdeployDriver(Driver):
     REPO_NAME = CMDEPLOY
     IMAGE_ALIAS = "localchat-cmdeploy"
     NAME_EXAMPLES = "cm0 cm1"
+    REQUIRED_SOURCE_PATHS = ["chatmaild", "cmdeploy"]
 
     _CACHED_DISABLE_SERVICES = [
         "postfix",

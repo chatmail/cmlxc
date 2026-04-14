@@ -20,6 +20,7 @@ class MadmailDriver(Driver):
     DEFAULT_SOURCE_URL = "https://github.com/themadorg/madmail.git"
     REPO_NAME = MADMAIL
     NAME_EXAMPLES = "mad0 mad1"
+    REQUIRED_SOURCE_PATHS = ["go.mod", "Makefile"]
 
     def prep_builder(self, bld_ct, source=None):
         """Perform one-time global preparation (toolchains, default checkouts)."""

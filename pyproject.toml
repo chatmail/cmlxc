@@ -55,5 +55,5 @@ commands = [
 [tool.tox.env.tests]
 deps = ["pytest"]
 commands = [
-    ["pytest", "tests/test_incus.py", "-v"],
+    ["pytest", "tests/", "-v"],
 ]
