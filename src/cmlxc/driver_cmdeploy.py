@@ -6,7 +6,7 @@ container -- no host-side Python imports are needed.
 
 import time
 
-from cmlxc.driver_base import Driver
+from cmlxc.driver_base import Driver, parse_source
 from cmlxc.incus import (
     CMDEPLOY,
     DNS_CONTAINER_NAME,
@@ -38,14 +38,12 @@ class CmdeployDriver(Driver):
     def prep_builder(self, bld_ct, source=None):
         """Perform one-time global preparation (toolchains, default checkouts)."""
         if source is None:
-            from cmlxc.driver_base import parse_source
-
             source = parse_source("@main", self.DEFAULT_SOURCE_URL)
 
         tmp_dest = f"/root/{self.REPO_NAME}-template"
         bld_ct.setup_repo(tmp_dest, self.out, source)
 
-        self.out.print(f"  Installing cmdeploy/chatmaild in template venv ...")
+        self.out.print("  Installing cmdeploy/chatmaild in template venv ...")
         prepare_build_container(bld_ct, tmp_dest, f"{tmp_dest}/venv")
 
     def init_builder(self, bld_ct, source, names):
@@ -56,7 +54,7 @@ class CmdeployDriver(Driver):
         for name in names:
             ct = self.ix.get_container(name)
             repo_path = ct.get_repo_path(self.REPO_NAME)
-            venv_path = ct.get_venv_path(self.REPO_NAME)
+            ct.get_venv_path(self.REPO_NAME)
 
             self.out.print(f"  Setting up {repo_path} ...")
             bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")

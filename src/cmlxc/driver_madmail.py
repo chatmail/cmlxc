@@ -8,10 +8,8 @@ and do not require DNS entries.
 
 import time
 
-from cmlxc.driver_base import Driver
+from cmlxc.driver_base import Driver, parse_source
 from cmlxc.incus import MADMAIL, DeployConflictError
-
-MADMAIL_REPO_URL = "https://github.com/themadorg/madmail.git"
 
 
 class MadmailDriver(Driver):
@@ -19,15 +17,13 @@ class MadmailDriver(Driver):
 
     CLI_NAME = "deploy-madmail"
     CLI_DOC = "Deploy a madmail relay service into a container."
-    DEFAULT_SOURCE_URL = MADMAIL_REPO_URL
+    DEFAULT_SOURCE_URL = "https://github.com/themadorg/madmail.git"
     REPO_NAME = MADMAIL
     NAME_EXAMPLES = "mad0 mad1"
 
     def prep_builder(self, bld_ct, source=None):
         """Perform one-time global preparation (toolchains, default checkouts)."""
         if source is None:
-            from cmlxc.driver_base import parse_source
-
             source = parse_source("@main", self.DEFAULT_SOURCE_URL)
 
         tmp_dest = f"/root/{self.REPO_NAME}-template"
