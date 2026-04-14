@@ -52,13 +52,12 @@ class CmdeployDriver(Driver):
         for name in names:
             ct = self.ix.get_container(name)
             repo_path = ct.get_repo_path(self.REPO_NAME)
-            venv_path = ct.get_venv_path(self.REPO_NAME)
 
             self.out.print(f"  Setting up {repo_path} ...")
             bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
 
             self.out.print(f"  Installing cmdeploy/chatmaild in {repo_path} ...")
-            prepare_build_container(bld_ct, repo_path, venv_path)
+            prepare_build_container(bld_ct, repo_path)
 
     def run_deploy(self, names, bld_ct, *, source, ipv4_only=False):
         """Ensure relay containers and deploy cmdeploy."""
@@ -243,11 +242,6 @@ def write_ini(builder_ct, ct, disable_ipv6=False):
     generate_chatmail_ini(builder_ct, ct, ct.domain, overrides)
 
 
-def prepare_build_container(bld_ct, repo_path, venv_path):
-    """Install chatmaild/cmdeploy into a fresh venv on the builder."""
-    bld_ct.bash(f"""
-        python3 -m venv {venv_path}
-        {venv_path}/bin/pip install \
-            -e {repo_path}/chatmaild \
-            -e {repo_path}/cmdeploy
-    """)
+def prepare_build_container(bld_ct, repo_path):
+    """Run the relay repo's own ``scripts/initenv.sh`` on the builder."""
+    bld_ct.bash(f"cd {repo_path} && bash scripts/initenv.sh")
