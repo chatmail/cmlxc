@@ -488,7 +488,6 @@ class BuilderContainer(Container):
         self.bash(f"rm -rf {dest}")
         out.print(f"  Initial clone of {name} ...")
         self.bash(f"git clone {source.url} {dest}")
-        self.bash(f"git config --global --add safe.directory {dest}")
 
     def get_repo_status(self, repo_path):
         """Return a one-line string describing the git repo at repo_path."""

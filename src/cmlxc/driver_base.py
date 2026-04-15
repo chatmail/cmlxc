@@ -153,6 +153,10 @@ class Driver:
             help="Create containers without IPv6 connectivity.",
         )
 
+
+    def configure_from_args(self, args):
+        """Apply driver-specific CLI arguments. Override in subclasses."""
+
     # ------------------------------------------------------------------
     # Deploy protocol (override in subclasses)
     # ------------------------------------------------------------------
@@ -191,6 +195,8 @@ class Driver:
     @classmethod
     def prep_builder(cls, ix, out, bld_ct):
         """Hook called by ``cmlxc init`` to prepare toolchains and main checkout."""
+        # Trust all repo paths inside the builder (ownership differs from host).
+        bld_ct.bash("git config --global --add safe.directory '*'", check=False)
         tmp_dest = f"/root/{cls.REPO_NAME}-git-main"
         if bld_ct.bash(f"test -d {tmp_dest}", check=False) is None:
             source = parse_source("@main", cls.DEFAULT_SOURCE_URL)
@@ -274,6 +280,8 @@ class Driver:
             source = parse_source(args.source, cls.DEFAULT_SOURCE_URL)
             if not driver.check_local_source(source):
                 return 1
+
+            driver.configure_from_args(args)
 
             out.print(f"cmlxc {__version__}")
             with out.section(f"Preparing {cls.CLI_NAME} source in builder"):
