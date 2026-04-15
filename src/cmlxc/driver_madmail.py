@@ -248,6 +248,7 @@ def prepare_build_container(bld_ct, go_mod_path):
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl unzip
             curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs
+            apt-get clean && rm -rf /var/lib/apt/lists/*
         fi
         if ! command -v bun >/dev/null 2>&1; then
             curl -fsSL https://bun.sh/install | bash

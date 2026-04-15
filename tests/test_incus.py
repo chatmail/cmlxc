@@ -66,8 +66,8 @@ def test_relay_container_naming(ix):
     assert ct.name == "t0-localchat"
     assert ct.domain == "_t0.localchat"
     # repo and venv paths on builder
-    assert ct.get_repo_path("cmdeploy") == "/root/cmdeploy-t0"
-    assert ct.get_venv_path("cmdeploy") == "/root/cmdeploy-t0/venv"
+    assert ct.get_repo_path("cmdeploy") == "/root/relays/cmdeploy-t0"
+    assert ct.get_venv_path("cmdeploy") == "/root/relays/cmdeploy-t0/venv"
 
 
 def test_typed_container_constructors(ix):

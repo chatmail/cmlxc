@@ -280,11 +280,24 @@ class RelayContainer(Container):
         driver = driver_name or self.driver_name
         if not driver:
             raise ValueError(f"No driver known for container {self.shortname!r}")
-        return f"/root/{driver}-{self.shortname}"
+        return f"/root/relays/{driver}-{self.shortname}"
 
     def get_venv_path(self, driver_name=None):
         """Return the absolute path to the venv in the builder container."""
         return f"{self.get_repo_path(driver_name)}/venv"
+
+    def destroy(self):
+        """Destroy current relay container and its checkout in the builder."""
+        state = self.get_deploy_state()
+        if state:
+            driver = state.get("driver")
+            if driver:
+                repo_path = self.get_repo_path(driver)
+                self.incus.run(
+                    ["exec", BUILDER_CONTAINER_NAME, "--", "rm", "-rf", repo_path],
+                    check=False,
+                )
+        super().destroy()
 
     def launch(self, image_candidates=None):
         image = super().launch(image_candidates=image_candidates)
@@ -439,6 +452,7 @@ class BuilderContainer(Container):
                 apt-get -o DPkg::Lock::Timeout=60 update
                 DEBIAN_FRONTEND=noninteractive apt-get install -y \
                     python3-venv git gcc make python3-dev rsync
+                apt-get clean && rm -rf /var/lib/apt/lists/*
             fi
             if [ ! -d /root/minitest-venv ]; then
                 python3 -m venv /root/minitest-venv
@@ -451,8 +465,7 @@ class BuilderContainer(Container):
                     requests \
                     python-dotenv \
                     cryptography
-                # python-dotenv and cryptography are needed by
-                # the madmail E2E test suite (test-madmail).
+                rm -rf /root/.cache/pip
             fi
         """)
 
@@ -563,6 +576,22 @@ class BuilderContainer(Container):
             f" {src_path} root@{relay_ip}:{dest_path}"
         )
 
+    def cleanup(self):
+        """Remove ephemeral checkouts and caches to minimize image size."""
+        self.bash("""
+            # Remove all ephemeral relay checkouts
+            rm -rf /root/relays/*
+            
+            # Remove all package manager caches
+            rm -rf /root/.cache/*
+            rm -rf /root/.npm
+            rm -rf /root/.bun
+            
+            # Clean up apt specifically just in case
+            apt-get clean
+            rm -rf /var/lib/apt/lists/*
+        """)
+
 
 class DNSContainer(Container):
     """Handle for PowerDNS name server container."""
@@ -629,6 +658,7 @@ class DNSContainer(Container):
             apt-get -o DPkg::Lock::Timeout=60 update
             DEBIAN_FRONTEND=noninteractive apt-get install -y \
                 pdns-server pdns-backend-sqlite3 sqlite3 pdns-recursor dnsutils
+            apt-get clean && rm -rf /var/lib/apt/lists/*
 
             # Remove the startup block
             rm /usr/sbin/policy-rc.d

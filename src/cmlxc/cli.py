@@ -80,7 +80,11 @@ def _destroy_relays(ix, out):
         for c in relays:
             name = c["name"]
             out.green(f"Destroying container {name!r} ...")
-            Container(ix, name).destroy()
+            ix.get_relay_container(name).destroy()
+
+        bld_ct = BuilderContainer(ix)
+        if bld_ct.is_running:
+            bld_ct.bash("rm -rf /root/relays/*")
 
 
 def init_cmd_options(parser):
@@ -110,7 +114,6 @@ def init_cmd(args, out):
 
         dns_ip = dns_ct.ipv4
         out.print(f"  {dns_ct.name} IP: {dns_ip}")
-        _print_dns_forwarding_status(out, dns_ip, host=False)
 
         out.green("Ensuring builder container ...")
         bld_ct = BuilderContainer(ix)
@@ -128,6 +131,7 @@ def init_cmd(args, out):
                 drv_cls.prep_builder(ix, out, bld_ct)
 
         ix.write_ssh_config()
+        bld_ct.cleanup()
         out.green("Builder container ready.")
 
 
@@ -223,9 +227,9 @@ def destroy_cmd(args, out):
         _destroy_relays(ix, out)
     elif args.names:
         for name in args.names:
-            full = Incus.get_container_name(name)
+            full = ix.get_container_name(name)
             out.green(f"Destroying container {full!r} ...")
-            Container(ix, full).destroy()
+            ix.get_relay_container(name).destroy()
     else:
         out.red("Error: specify container name(s) or --all.")
         return 1

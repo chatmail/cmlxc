@@ -91,7 +91,7 @@ class Driver:
         self.ct = ct
         self.ix = ct.incus
         self.out = out
-        self.repo_path = f"/root/{self.REPO_NAME}-{ct.shortname}"
+        self.repo_path = f"/root/relays/{self.REPO_NAME}-{ct.shortname}"
         self.venv_path = f"{self.repo_path}/venv"
 
     # ------------------------------------------------------------------
@@ -195,7 +195,21 @@ class Driver:
     def prep_builder(cls, ix, out, bld_ct):
         """Hook called by ``cmlxc init`` to prepare toolchains and main checkout."""
         # Trust all repo paths inside the builder (ownership differs from host).
+        bld_ct.bash("mkdir -p /root/relays")
         bld_ct.bash("git config --global --add safe.directory '*'", check=False)
+
+        # In CI and some environments, SSH checkouts fail.
+        # Ensure we always use HTTPS for GH and Codeberg.
+        bld_ct.bash(
+            "git config --global url.'https://github.com/'.insteadOf 'git@github.com:'",
+            check=False,
+        )
+        bld_ct.bash(
+            "git config --global"
+            " url.'https://codeberg.org/'.insteadOf 'git@codeberg.org:'",
+            check=False,
+        )
+
         tmp_dest = f"/root/{cls.REPO_NAME}-git-main"
         if bld_ct.bash(f"test -d {tmp_dest}", check=False) is None:
             source = parse_source("@main", cls.DEFAULT_SOURCE_URL)
@@ -226,7 +240,6 @@ class Driver:
                 git reset --hard -q origin/{source.ref} 2>/dev/null || true
                 git clean -fdx
                 if [ -f .gitmodules ]; then
-                    git config --global url."https://github.com/".insteadOf git@github.com:
                     git submodule update --init --recursive
                 fi
             """)
