@@ -21,7 +21,7 @@ from cmlxc.container import (
 )
 from cmlxc.driver_base import __version__
 from cmlxc.driver_cmdeploy import CmdeployDriver
-from cmlxc.driver_madmail import MadmailDriver
+from cmlxc.driver_madmail import MadmailDriver, print_admin_info
 from cmlxc.incus import Incus, _is_ip_address, check_cgroup_compat
 from cmlxc.output import Out
 
@@ -435,6 +435,9 @@ def _print_container_status(out, c, ix):
                 detail_out.print(f"source: {source_ref}")
                 detail_out.print(f"        {status}")
                 detail_out.print(f"builder: {repo_path}")
+        if driver == "madmail":
+            ct = ix.get_relay_container(cname)
+            print_admin_info(detail_out, ct, ip)
 
     elif cname == BUILDER_CONTAINER_NAME and is_running:
         _print_builder_repos(detail_out, BuilderContainer(ix))

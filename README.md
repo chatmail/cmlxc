@@ -61,7 +61,9 @@ The `--source` argument controls where the code comes from:
 
     cmlxc deploy-cmdeploy --source @main cm0
     cmlxc deploy-madmail  --source @main mad1
+    cmlxc deploy-madmail  --source @main --with-webadmin mad1
     cmlxc deploy-madmail  --source @main --ipv4-only mad1
+
 
 | Form | Meaning |
 |---------|---------|

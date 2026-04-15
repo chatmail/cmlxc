@@ -24,6 +24,22 @@ class MadmailDriver(Driver):
     REQUIRED_SOURCE_PATHS = ["go.mod", "Makefile"]
 
     @classmethod
+    def add_cli_options(cls, parser, completer=None):
+        """Register madmail-specific deploy options."""
+        super().add_cli_options(parser, completer=completer)
+        parser.add_argument(
+            "--with-webadmin",
+            action="store_true",
+            help=(
+                "Build and enable the embedded admin web UI at /admin. "
+                "Disabled by default."
+            ),
+        )
+
+    def configure_from_args(self, args):
+        self.with_admin = bool(args.with_webadmin)
+
+    @classmethod
     def on_prep_builder(cls, out, bld_ct, tmp_dest):
         """Hook called by ``prep_builder`` to ensure the Go toolchain is ready."""
         out.print("  Ensuring build environment (Go) ...")
@@ -31,18 +47,55 @@ class MadmailDriver(Driver):
 
     def on_init_relay(self, repo_path):
         """Hook called by ``init_builder`` to build the maddy binary."""
-        with self.out.section(f"Building maddy binary for {self.ct.shortname}"):
-            self.bld_ct.bash(f"""
-                if [ -f '{repo_path}/admin-web/package.json' ]; then
-                    cd '{repo_path}/admin-web' && bun install
-                fi
-            """)
-            self.out.print(f"Compiling maddy in {repo_path} (make build) ...")
-            ret = self.out.shell(
-                f"incus exec {self.bld_ct.name} -- bash -c 'cd {repo_path} && make build'"
-            )
+        mode = "with admin web UI" if self.with_admin else "without admin web UI"
+        with self.out.section(
+            f"Building maddy binary for {self.ct.shortname} ({mode})"
+        ):
+            if self.with_admin:
+                # Ensure admin-web submodule is populated and dependencies installed;
+                # build.sh copy_admin_web() handles the actual SPA build.
+                self.bld_ct.bash(f"""
+                    if [ ! -f '{repo_path}/admin-web/package.json' ]; then
+                        cd '{repo_path}' && git submodule update --init admin-web
+                    fi
+                    cd '{repo_path}/admin-web'
+                    if command -v bun >/dev/null 2>&1; then
+                        bun install
+                    elif command -v npm >/dev/null 2>&1; then
+                        npm install
+                    fi
+                """)
+            else:
+                # Hide package.json so build.sh creates a placeholder instead.
+                self.bld_ct.bash(f"""
+                    PKG='{repo_path}/admin-web/package.json'
+                    BAK='{repo_path}/admin-web/package.json.cmlxc-disabled'
+                    if [ -f "$PKG" ]; then mv "$PKG" "$BAK"; fi
+                """)
+
+            try:
+                ret = self.out.shell(
+                    f"incus exec {self.bld_ct.name} -- bash -c "
+                    f"'cd {repo_path} && make clean build'"
+                )
+            finally:
+                # Restore package.json if we hid it.
+                self.bld_ct.bash(f"""
+                    BAK='{repo_path}/admin-web/package.json.cmlxc-disabled'
+                    PKG='{repo_path}/admin-web/package.json'
+                    if [ -f "$BAK" ] && [ ! -f "$PKG" ]; then mv "$BAK" "$PKG"; fi
+                """)
+
             if ret:
                 raise SetupError(f"maddy build failed in {repo_path} (exit {ret})")
+
+            if self.with_admin:
+                check = self.bld_ct.bash(
+                    f"test -f {repo_path}/internal/adminweb/build/index.html",
+                    check=False,
+                )
+                if check is None:
+                    raise SetupError("admin-web build produced no index.html")
 
     def get_test_domain_or_ip(self):
         if not self.ct.ipv4:
@@ -80,22 +133,70 @@ class MadmailDriver(Driver):
             )
             self.ct.bash("chmod +x /tmp/madmail")
 
-            self.out.print(f"Running madmail install --simple --ip {ip} ...")
+            install_flags = (
+                f"--simple --ip {ip}"
+                " --tls-mode self_signed"
+                " --enable-chatmail"
+                " --non-interactive"
+            )
+            self.out.print(f"Running madmail install {install_flags} ...")
             self.ct.bash("systemctl stop madmail || true")
-            self.ct.bash(f"/tmp/madmail install --simple --ip {ip}")
+            self.ct.bash(f"/tmp/madmail install {install_flags}")
 
             self.out.print("Starting madmail service ...")
             self.ct.bash("systemctl daemon-reload")
             self.ct.bash("systemctl enable madmail")
             self.ct.bash("systemctl start madmail")
+
+            if self.with_admin:
+                self.out.print("Configuring admin web interface at /admin ...")
+                self.ct.bash("madmail admin-web path /admin")
+                self.ct.bash("madmail admin-web enable")
+                # Path changes are applied at startup.
+                self.ct.bash("systemctl restart madmail")
+            else:
+                self.out.print("Disabling admin web interface ...")
+                self.ct.bash("madmail admin-web disable")
+
             self.ct.bash("rm -f /tmp/madmail")
 
             self.ct.write_deploy_state(MADMAIL, source=source)
             self.out.green(f"madmail deployed to {self.ct.shortname} ({ip})")
+            print_admin_info(self.out, self.ct, ip)
 
         elapsed = time.time() - t_total
         self.out.section_line(f"deploy madmail complete ({elapsed:.1f}s)")
 
+
+def print_admin_info(out, ct, ip):
+    """Print admin API token and admin-web endpoint state."""
+    try:
+        token = ct.bash("madmail admin-token --raw", check=False).strip()
+        if token:
+            out.print(f"admin-token: {token}")
+
+        status = ct.bash("madmail admin-web status", check=False) or ""
+        enabled, path = _parse_admin_web_status(status)
+        if enabled and path:
+            out.print(f"admin web: https://{ip}{path}/")
+            out.print(f"admin API: https://{ip}/api/admin")
+        else:
+            out.print("admin-url: disabled")
+    except Exception:
+        pass
+
+
+def _parse_admin_web_status(status):
+    enabled = "Admin Web Dashboard:  enabled" in status
+    path = None
+    for line in status.splitlines():
+        if "Admin Web Path:" in line:
+            _, _, value = line.partition("Admin Web Path:")
+            value = value.strip()
+            if value.startswith("/"):
+                path = value.rstrip("/")
+            break
+    return enabled, path
 
 
 def prepare_build_container(bld_ct, go_mod_path):
