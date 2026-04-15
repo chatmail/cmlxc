@@ -1,16 +1,37 @@
 # Changelog
 
+## [0.8.0] - 2026-04-15
+
+### Features / Changes
+
+- madmail: add test-madmail command and E2E tests, with some selected madmail tests run by default.
+- madmail: add mandatory install flags for IP-based deployment.
+- make output logging more consistent and provide more precise info
+
+### Refactor
+
+- [**breaking**] extract container module and standardise driver hooks.
+
 ## [0.7.5] - 2026-04-14
 
 ### Documentation
 
-- add note to README on Zabbly Incus and refactor init preparation
+- note Zabbly Incus and refactor init prep.
 
 ### Fixes
 
-- make --source PATH cmdeploy work: create venv per relay instead of in template
-
+- create venv per relay instead of in template.
 - validate relay names to reject path-like arguments, and validate --source local paths.
+
+### Miscellaneous Tasks
+
+- release v0.7.5.
+
+### Other
+
+- remove superflous indirection of madmail repo url.
+
+### Refactor
 
 - use relay's scripts/initenv.sh for venv setup instead of custom venv and install commands.
 
@@ -145,6 +166,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.8.0]: https://github.com/chatmail/cmlxc/compare/v0.7.5..v0.8.0
 [0.7.5]: https://github.com/chatmail/cmlxc/compare/v0.7.4..v0.7.5
 [0.7.4]: https://github.com/chatmail/cmlxc/compare/v0.7.3..v0.7.4
 [0.7.3]: https://github.com/chatmail/cmlxc/compare/v0.7.2..v0.7.3
