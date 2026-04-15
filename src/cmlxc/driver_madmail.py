@@ -80,9 +80,15 @@ class MadmailDriver(Driver):
             )
             self.ct.bash("chmod +x /tmp/madmail")
 
-            self.out.print(f"Running madmail install --simple --ip {ip} ...")
+            install_flags = (
+                f"--simple --ip {ip}"
+                " --tls-mode self_signed"
+                " --enable-chatmail"
+                " --non-interactive"
+            )
+            self.out.print(f"Running madmail install {install_flags} ...")
             self.ct.bash("systemctl stop madmail || true")
-            self.ct.bash(f"/tmp/madmail install --simple --ip {ip}")
+            self.ct.bash(f"/tmp/madmail install {install_flags}")
 
             self.out.print("Starting madmail service ...")
             self.ct.bash("systemctl daemon-reload")
@@ -95,7 +101,6 @@ class MadmailDriver(Driver):
 
         elapsed = time.time() - t_total
         self.out.section_line(f"deploy madmail complete ({elapsed:.1f}s)")
-
 
 
 def prepare_build_container(bld_ct, go_mod_path):
