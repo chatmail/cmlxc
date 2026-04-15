@@ -1,4 +1,5 @@
 import imaplib
+import ipaddress
 import itertools
 import random
 import smtplib
@@ -40,8 +41,20 @@ class SmtpConn:
         return self.conn.sendmail(from_addr=from_addr, to_addrs=to_addrs, msg=msg)
 
 
+def _is_ip(domain):
+    """Check if domain is a bare IP address."""
+    try:
+        ipaddress.ip_address(domain)
+        return True
+    except ValueError:
+        return False
+
+
 def get_gencreds(domain):
     count = itertools.count(1)
+
+    # RFC 5321 requires IP-literal domains to be bracketed.
+    addr_domain = f"[{domain}]" if _is_ip(domain) else domain
 
     def gen():
         while 1:
@@ -50,7 +63,7 @@ def get_gencreds(domain):
             user = "".join(random.choices(alphanumeric, k=10))
             user = f"ac{num}_{user}"[:9]
             password = "".join(random.choices(alphanumeric, k=12))
-            yield f"{user}@{domain}", f"{password}"
+            yield f"{user}@{addr_domain}", f"{password}"
 
     _g = gen()
     return lambda: next(_g)
@@ -72,10 +85,22 @@ class ChatmailACFactory:
         for _ in range(num):
             addr, password = self.gencreds()
             account = self.dc.add_account()
-            config = {"addr": addr, "password": password}
-            if self.ssl_context:
-                config["certificateChecks"] = "acceptInvalidCertificates"
-            account.add_or_update_transport(config)
+            if _is_ip(self.maildomain):
+                # Use DCLOGIN scheme with explicit server hosts,
+                # matching how madmail presents its addresses to users.
+                qr = (
+                    f"dclogin:{addr}"
+                    f"?p={password}&v=1"
+                    f"&ih={self.maildomain}&ip=993"
+                    f"&sh={self.maildomain}&sp=465"
+                    f"&ic=3&ss=default"
+                )
+                account.add_transport_from_qr(qr)
+            else:
+                config = {"addr": addr, "password": password}
+                if self.ssl_context:
+                    config["certificateChecks"] = "acceptInvalidCertificates"
+                account.add_or_update_transport(config)
             account.set_config("delete_server_after", "10")
             account.bring_online()
             accounts.append(account)
