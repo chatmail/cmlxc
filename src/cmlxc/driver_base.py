@@ -19,6 +19,7 @@ from cmlxc.container import (
     BASE_IMAGE_ALIAS,
     DNS_CONTAINER_NAME,
     BuilderContainer,
+    DNSContainer,
 )
 from cmlxc.incus import Incus
 
@@ -264,6 +265,15 @@ class Driver:
     def get_test_domain_or_ip(self):
         """Return the address used by test commands."""
         return self.ct.domain
+
+    def configure_dns(self):
+        """Configure DNS resolver and return the DNSContainer."""
+        dns_ct = DNSContainer(self.ix)
+        dns_ct.wait_ready(timeout=5)
+        with self.out.section("Preparing DNS configuration"):
+            self.out.print(f"Configuring DNS for {self.ct.shortname} ...")
+            self.ct.configure_dns(dns_ct.ipv4)
+        return dns_ct
 
     # ------------------------------------------------------------------
     # Subcommand factory

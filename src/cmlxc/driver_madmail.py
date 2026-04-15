@@ -165,6 +165,8 @@ class MadmailDriver(Driver):
             self.ct.wait_ready()
         ip = self.ct.ipv4
 
+        self.configure_dns()
+
         with self.out.section(f"madmail deploy: {self.ct.shortname} ({ip})"):
             self.out.print("Pushing madmail binary via SCP ...")
             self.ct.bash("rm -f /tmp/madmail")
@@ -184,6 +186,10 @@ class MadmailDriver(Driver):
             self.out.print(f"Running madmail install {install_flags} ...")
             self.ct.bash("systemctl stop madmail || true")
             self.ct.bash(f"/tmp/madmail install {install_flags}")
+
+            # Enable logging for troubleshooting
+            self.out.print("Enabling syslog logging ...")
+            self.ct.bash("sed -i 's/^log off$/log syslog/' /etc/madmail/madmail.conf")
 
             self.out.print("Starting madmail service ...")
             self.ct.bash("systemctl daemon-reload")

@@ -40,14 +40,6 @@ def _module_setup():
     if not shutil.which("incus"):
         pytest.skip("incus is not installed or in the $PATH")
 
-    yield
-    subprocess.run(
-        ["cmlxc", "destroy", CT0, CT1, CT_MAD],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
-
 
 # ---- init / status ---------------------------------------------------------
 
@@ -90,7 +82,7 @@ def test_stop():
 
 
 def test_destroy():
-    cmlxc("destroy", CT0, CT1)
+    cmlxc("destroy", CT1)
 
 
 # ---- madmail cycle ---------------------------------------------------------
@@ -108,5 +100,6 @@ def test_madmail():
     cmlxc("test-madmail", CT_MAD)
 
 
-def test_destroy_madmail():
-    cmlxc("destroy", CT_MAD)
+def test_cross_madmail_cmdeploy():
+    cmlxc("test-mini", CT0, CT_MAD)
+    cmlxc("test-mini", CT_MAD, CT0)

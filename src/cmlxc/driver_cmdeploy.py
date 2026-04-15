@@ -6,7 +6,7 @@ container -- no host-side Python imports are needed.
 
 import time
 
-from cmlxc.container import DNSContainer, SetupError
+from cmlxc.container import SetupError
 from cmlxc.driver_base import Driver
 
 CMDEPLOY = "cmdeploy"
@@ -87,13 +87,7 @@ class CmdeployDriver(Driver):
         self.ix.write_ssh_config()
         self.bld_ct.write_relay_ssh_config(self.ct)
 
-        dns_ct = DNSContainer(self.ix)
-        dns_ct.wait_ready(timeout=5)
-
-        with self.out.section("Preparing DNS configuration"):
-            sub = self.out.new_prefixed_out()
-            sub.print(f"Configuring DNS for {self.ct.shortname} ...")
-            self.ct.configure_dns(dns_ct.ipv4)
+        dns_ct = self.configure_dns()
 
         # Bootstrap minimal A record so cmdeploy can find the relay
         dns_ct.set_dns_records(
