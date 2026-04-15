@@ -1,6 +1,11 @@
+import imaplib
 import ipaddress
+import smtplib
+import ssl
+from email.mime.text import MIMEText
 
 import imap_tools
+import pytest
 import requests
 
 
@@ -26,6 +31,18 @@ class TestEndToEndDeltaChat:
         lp.sec("wait for ac2 to receive message")
         msg2 = ac2.wait_for_incoming_msg()
         assert msg2.get_snapshot().text == "message0"
+
+    def test_send_dot(self, cmfactory, lp):
+        """Test that a single dot is properly escaped in SMTP protocol"""
+        ac1, ac2 = cmfactory.get_online_accounts(2)
+        chat = cmfactory.get_accepted_chat(ac1, ac2)
+
+        lp.sec("ac1: sending single dot message")
+        chat.send_text(".")
+
+        lp.sec("ac2: wait for receive")
+        msg2 = ac2.wait_for_incoming_msg()
+        assert msg2.get_snapshot().text == "."
 
 
 class TestMultiRelay:
@@ -73,3 +90,44 @@ def test_hide_senders_ip_address(cmfactory, ssl_context):
     msgs = list(mailbox.fetch(mark_seen=False))
     assert msgs, "expected at least one message"
     assert public_ip not in msgs[0].obj.as_string()
+
+
+def test_unencrypted_rejection(cmsetup, lp):
+    """Test that unencrypted messages are rejected by the relay."""
+    lp.sec("creating users")
+    u1, u2 = cmsetup.gen_users(2)
+
+    lp.sec("sending unencrypted mail via SMTP")
+    msg = MIMEText("unencrypted")
+    msg["Subject"] = "test"
+    msg["From"] = u1.addr
+    msg["To"] = u2.addr
+
+    try:
+        u1.smtp.sendmail(u1.addr, [u2.addr], msg.as_string())
+        pytest.fail("Unencrypted message was accepted!")
+    except smtplib.SMTPDataError as e:
+        assert e.smtp_code == 523
+    except smtplib.SMTPRecipientsRefused as e:
+        for addr, (code, msg) in e.recipients.items():
+            assert code == 523
+
+
+def test_login_domain_validation(maildomain, lp):
+    """Test that IMAP LOGIN validates the domain part for JIT creation."""
+    lp.sec("attempting login with invalid domain")
+    # We use raw imaplib because cmsetup.gen_users() would fail at credential generation
+    # or handle the error differently.
+    user = f"invalid@{maildomain}.invalid"
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    with imaplib.IMAP4_SSL(maildomain, ssl_context=ctx) as conn:
+        try:
+            conn.login(user, "password")
+            pytest.fail("Login with invalid domain was accepted!")
+        except imaplib.IMAP4.error as e:
+            # Most relays return [AUTHENTICATIONFAILED] or similar
+            assert "FAILED" in str(e) or "Invalid" in str(e)

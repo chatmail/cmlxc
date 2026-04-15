@@ -448,7 +448,11 @@ class BuilderContainer(Container):
                     deltachat-rpc-client \
                     deltachat-rpc-server \
                     imap-tools \
-                    requests
+                    requests \
+                    python-dotenv \
+                    cryptography
+                # python-dotenv and cryptography are needed by
+                # the madmail E2E test suite (test-madmail).
             fi
         """)
 
@@ -526,7 +530,15 @@ class BuilderContainer(Container):
         )
         self.bash("chown root:root /root/.ssh/id_localchat")
         self.bash("chmod 600 /root/.ssh/id_localchat")
-        self.bash("echo 'Include /root/.ssh/config.d/*' > /root/.ssh/config")
+        self.bash(
+            "printf 'Include /root/.ssh/config.d/*\\n\\n"
+            "Host *\\n"
+            "  IdentityFile /root/.ssh/id_localchat\\n"
+            "  StrictHostKeyChecking accept-new\\n"
+            "  UserKnownHostsFile /dev/null\\n"
+            "  LogLevel ERROR\\n'"
+            " > /root/.ssh/config"
+        )
 
     def write_relay_ssh_config(self, ct):
         """Write an ssh-config.d file for a single relay container."""

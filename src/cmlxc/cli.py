@@ -1,7 +1,7 @@
 """cmlxc -- Manage local chatmail relay containers via Incus.
 
 Standard workflow:
-init -> deploy-cmdeploy/deploy-madmail -> test-cmdeploy/test-mini.
+init -> deploy-cmdeploy/deploy-madmail -> test-cmdeploy/test-madmail/test-mini.
 """
 
 import argparse
@@ -290,6 +290,56 @@ def test_cmdeploy_cmd(args, out):
 
 
 # -------------------------------------------------------------------
+# test-madmail
+# -------------------------------------------------------------------
+
+
+def test_madmail_cmd_options(parser):
+    _add_test_relay_args(parser)
+    parser.add_argument(
+        "--cool",
+        action="store_true",
+        help="Minimal colored output (pass --cool to madmail test suite).",
+    )
+    parser.add_argument(
+        "--simple",
+        action="store_true",
+        default=True,
+        help="Run only simpler tests (1-6). Enabled by default.",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_false",
+        dest="simple",
+        help="Run all tests (disables --simple).",
+    )
+
+
+def test_madmail_cmd(args, out):
+    """Run madmail E2E tests inside the builder container."""
+    ix = Incus(out)
+    ct = ix.get_running_relay(args.relay)
+    driver = MadmailDriver(ct, out)
+    if not driver.check_init():
+        return 1
+
+    if not driver.get_builder():
+        return 1
+
+    second_domain = None
+    if args.relay2:
+        ct2 = ix.get_running_relay(args.relay2)
+        drv2 = MadmailDriver(ct2, out)
+        second_domain = drv2.get_test_domain_or_ip()
+
+    return driver.run_tests(
+        second_domain=second_domain,
+        cool=args.cool,
+        simple=args.simple,
+    )
+
+
+# -------------------------------------------------------------------
 # minitest
 # -------------------------------------------------------------------
 
@@ -523,6 +573,7 @@ def _print_dns_forwarding_status(out, dns_ip, *, host=False):
 SUBCOMMANDS = [
     ("init", init_cmd, init_cmd_options),
     ("test-cmdeploy", test_cmdeploy_cmd, test_cmdeploy_cmd_options),
+    ("test-madmail", test_madmail_cmd, test_madmail_cmd_options),
     ("test-mini", test_mini_cmd, test_mini_cmd_options),
     ("status", status_cmd, status_cmd_options),
     ("start", start_cmd, start_cmd_options),

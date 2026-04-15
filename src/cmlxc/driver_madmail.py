@@ -97,6 +97,48 @@ class MadmailDriver(Driver):
                 if check is None:
                     raise SetupError("admin-web build produced no index.html")
 
+    def run_tests(self, second_domain=None, cool=False, simple=False):
+        """Execute the madmail E2E test suite against relays."""
+        test_src = f"{self.get_git_main_path()}/tests/deltachat-test"
+
+        with self.out.section("test-madmail"):
+            # Symlink the built maddy binary into the test directory so
+            # tests that spawn a local server can find it at build/maddy.
+            self.bld_ct.bash(
+                f"mkdir -p {test_src}/build"
+                f" && ln -sf {self.repo_path}/build/maddy {test_src}/build/maddy"
+            )
+
+            relay1 = self.get_test_domain_or_ip()
+            rpc = "/root/minitest-venv/bin/deltachat-rpc-server"
+            env_exports = (
+                f"export REMOTE1={relay1} REMOTE2={relay1} RPC_SERVER_PATH={rpc}"
+            )
+            if second_domain:
+                env_exports = (
+                    f"export REMOTE1={relay1} REMOTE2={second_domain}"
+                    f" RPC_SERVER_PATH={rpc}"
+                )
+
+            cool_flag = " --cool" if cool else ""
+            if simple:
+                test_flags = "--test-1 --test-2 --test-3 --test-4 --test-5 --test-6"
+            else:
+                test_flags = "--all"
+
+            cmd = (
+                f"incus exec {self.bld_ct.name} --"
+                f" bash -c '"
+                f"{env_exports} &&"
+                f" source /root/minitest-venv/bin/activate &&"
+                f" cd {test_src} &&"
+                f" python main.py {test_flags}{cool_flag}'"
+            )
+            ret = self.out.shell(cmd)
+            if ret:
+                self.out.red(f"test-madmail failed (exit {ret})")
+            return ret
+
     def get_test_domain_or_ip(self):
         if not self.ct.ipv4:
             self.ct.wait_ready()
@@ -178,8 +220,7 @@ def print_admin_info(out, ct, ip):
         status = ct.bash("madmail admin-web status", check=False) or ""
         enabled, path = _parse_admin_web_status(status)
         if enabled and path:
-            out.print(f"admin web: https://{ip}{path}/")
-            out.print(f"admin API: https://{ip}/api/admin")
+            out.print(f"admin-url: https://{ip}{path}/")
         else:
             out.print("admin-url: disabled")
     except Exception:

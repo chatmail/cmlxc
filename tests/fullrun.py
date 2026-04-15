@@ -1,6 +1,6 @@
 """Functional test — exercises the complete cmlxc workflow in the live system.
 
-Uses and destroys ``fulltest0`` and ``fulltest1`` containers.
+Uses and destroys ``fulltest0``, ``fulltest1`` and ``fulltest-mad0`` containers.
 
 Run with::
 
@@ -19,6 +19,7 @@ from cmlxc.output import Out
 
 CT0 = "fulltest0"
 CT1 = "fulltest1"
+CT_MAD = "fulltest-mad0"
 
 
 def cmlxc(*args):
@@ -41,7 +42,7 @@ def _module_setup():
 
     yield
     subprocess.run(
-        ["cmlxc", "destroy", CT0, CT1],
+        ["cmlxc", "destroy", CT0, CT1, CT_MAD],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         check=False,
@@ -96,12 +97,16 @@ def test_destroy():
 
 
 def test_mad_deploy():
-    cmlxc("deploy-madmail", "--source", "@main", "--ipv4-only", CT0)
+    cmlxc("deploy-madmail", "--source", "@main", "--ipv4-only", CT_MAD)
 
 
 def test_mini_madmail():
-    cmlxc("test-mini", CT0)
+    cmlxc("test-mini", CT_MAD)
+
+
+def test_madmail():
+    cmlxc("test-madmail", CT_MAD)
 
 
 def test_destroy_madmail():
-    cmlxc("destroy", CT0)
+    cmlxc("destroy", CT_MAD)
