@@ -13,12 +13,8 @@ import subprocess
 
 import pytest
 
-from cmlxc.incus import (
-    BASE_IMAGE_ALIAS,
-    BUILDER_CONTAINER_NAME,
-    DNS_CONTAINER_NAME,
-    Incus,
-)
+from cmlxc.container import BASE_IMAGE_ALIAS, BuilderContainer, DNSContainer
+from cmlxc.incus import Incus
 from cmlxc.output import Out
 
 CT0 = "fulltest0"
@@ -57,11 +53,12 @@ def _module_setup():
 
 def test_init():
     ix = Incus(Out())
-    dns_ct = ix.get_container(DNS_CONTAINER_NAME)
-    bld_ct = ix.get_container(BUILDER_CONTAINER_NAME)
+    dns_ct = DNSContainer(ix)
+    bld_ct = BuilderContainer(ix)
     if dns_ct.is_running and bld_ct.is_running and ix.find_image([BASE_IMAGE_ALIAS]):
         pytest.skip("already initialized")
     cmlxc("init")
+    assert ix.ssh_config_path.exists()
 
 
 def test_status():
@@ -72,7 +69,8 @@ def test_status():
 
 
 def test_cm_deploy():
-    cmlxc("deploy-cmdeploy", "--source", "@main", CT0, CT1)
+    cmlxc("deploy-cmdeploy", "--source", "@main", CT0)
+    cmlxc("deploy-cmdeploy", "--source", "@main", CT1)
 
 
 def test_mini_cmdeploy():

@@ -6,12 +6,10 @@ container -- no host-side Python imports are needed.
 
 import time
 
-from cmlxc.driver_base import Driver, parse_source
-from cmlxc.incus import (
-    CMDEPLOY,
-    DNS_CONTAINER_NAME,
-    DeployConflictError,
-)
+from cmlxc.container import DNSContainer, SetupError
+from cmlxc.driver_base import Driver
+
+CMDEPLOY = "cmdeploy"
 
 
 class CmdeployDriver(Driver):
@@ -22,7 +20,6 @@ class CmdeployDriver(Driver):
     DEFAULT_SOURCE_URL = "https://github.com/chatmail/relay.git"
     REPO_NAME = CMDEPLOY
     IMAGE_ALIAS = "localchat-cmdeploy"
-    NAME_EXAMPLES = "cm0 cm1"
     REQUIRED_SOURCE_PATHS = ["chatmaild", "cmdeploy"]
 
     _CACHED_DISABLE_SERVICES = [
@@ -36,198 +33,142 @@ class CmdeployDriver(Driver):
         "fcgiwrap",
     ]
 
-    def prep_builder(self, bld_ct, source=None):
-        """Check out the source into the template directory (no venv)."""
-        if source is None:
-            source = parse_source("@main", self.DEFAULT_SOURCE_URL)
+    def on_init_relay(self, repo_path):
+        """Hook called by ``init_builder`` to run initenv.sh for the relay."""
+        self.out.print(f"  Running scripts/initenv.sh for {self.ct.shortname} ...")
+        self.bld_ct.bash(f"cd {repo_path} && bash scripts/initenv.sh")
 
-        tmp_dest = f"/root/{self.REPO_NAME}-template"
-        bld_ct.setup_repo(tmp_dest, self.out, source)
-
-    def init_builder(self, bld_ct, source, names):
-        """Copy the template checkout per relay and create a fresh venv."""
-        tmp_dest = f"/root/{self.REPO_NAME}-template"
-        self.prep_builder(bld_ct, source=source)
-
-        for name in names:
-            ct = self.ix.get_container(name)
-            repo_path = ct.get_repo_path(self.REPO_NAME)
-
-            self.out.print(f"  Preparing {name} checkout ...")
-            bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
-
-            self.out.print(f"  Running scripts/initenv.sh for {name} ...")
-            prepare_build_container(bld_ct, repo_path)
-
-    def run_deploy(self, names, bld_ct, *, source, ipv4_only=False):
-        """Ensure relay containers and deploy cmdeploy."""
-        try:
-            for name in names:
-                with self.out.section(f"Preparing container setup: {name}"):
-                    self.ix.ensure_relay_containers(
-                        [name],
-                        ipv4_only=ipv4_only,
-                        image_candidates=[self.IMAGE_ALIAS, "localchat-base"],
-                    )
-                ret = self.deploy([name], bld_ct, source=source)
-                if ret:
-                    return ret
-            return 0
-        except DeployConflictError as exc:
-            self.out.red(f"Deploy conflict: {exc}")
-            return 1
-
-    def deploy(self, relay_names, builder_ct, source=None):
-        """Deploy chatmail services via cmdeploy."""
+    def run_deploy(self, *, source, ipv4_only=False):
+        """Deploy cmdeploy to a single relay container."""
+        with self.out.section(f"Preparing container setup: {self.ct.shortname}"):
+            self.ct.ensure(
+                ipv4_only=ipv4_only,
+                image_candidates=[self.IMAGE_ALIAS, "localchat-base"],
+            )
         t_total = time.time()
-        out = self.out
-        ix = self.ix
-        relays = [ix.get_container(n) for n in relay_names]
+        self.deploy(source=source)
+        elapsed = time.time() - t_total
+        self.out.section_line(f"deploy cmdeploy complete ({elapsed:.1f}s)")
 
-        # Check deploy locks before doing anything destructive
-        for ct in relays:
-            ct.check_deploy_lock(CMDEPLOY)
+    def run_tests(self, second_domain=None):
+        """Execute the cmdeploy test suite against the relay."""
+        with self.out.section("cmdeploytest"):
+            self.out.print("Preparing chatmail.ini on builder ...")
+            write_ini(self.bld_ct, self.ct, disable_ipv6=self.ct.is_ipv6_disabled)
 
-        ix.write_ssh_config()
-        builder_ct.setup_ssh(relays)
+            env = {}
+            if second_domain:
+                env["CHATMAIL_DOMAIN2"] = second_domain
 
-        dns_ct = ix.get_container(DNS_CONTAINER_NAME)
+            test_addr = self.get_test_domain_or_ip()
+            self.out.print(f"Running cmdeploy tests against {test_addr} ...")
+
+            ini_path = f"{self.repo_path}/chatmail.ini"
+            env_exports = f"export CHATMAIL_INI={ini_path}"
+            for k, v in env.items():
+                env_exports += f" && export {k}={v}"
+            cmd = (
+                f"incus exec {self.bld_ct.name} --"
+                f" bash -c '"
+                f"{env_exports} &&"
+                f" source {self.venv_path}/bin/activate &&"
+                f" cd {self.repo_path} &&"
+                f" pytest cmdeploy/src/ -n4 -rs -x -v --durations=5'"
+            )
+            ret = self.out.shell(cmd)
+            if ret:
+                self.out.red(f"test-cmdeploy failed (exit {ret})")
+            return ret
+
+    def deploy(self, source=None):
+        """Deploy chatmail services to a single relay via cmdeploy."""
+        self.ct.check_deploy_lock(CMDEPLOY)
+
+        self.ix.write_ssh_config()
+        self.bld_ct.write_relay_ssh_config(self.ct)
+
+        dns_ct = DNSContainer(self.ix)
         dns_ct.wait_ready(timeout=5)
 
-        with out.section("Preparing DNS configuration"):
-            sub = out.new_prefixed_out()
-            for ct in relays:
-                sub.print(f"Configuring DNS for {ct.sname} ...")
-                ct.configure_dns(dns_ct.ipv4)
+        with self.out.section("Preparing DNS configuration"):
+            sub = self.out.new_prefixed_out()
+            sub.print(f"Configuring DNS for {self.ct.shortname} ...")
+            self.ct.configure_dns(dns_ct.ipv4)
 
-        # Deploy chatmail on each relay
-        for ct in relays:
-            # Bootstrap minimal A record so cmdeploy can find the relay
-            dns_ct.set_dns_records(ct.domain, f"{ct.domain}. 3600 IN A {ct.ipv4}")
+        # Bootstrap minimal A record so cmdeploy can find the relay
+        dns_ct.set_dns_records(
+            self.ct.domain,
+            f"{self.ct.domain}. 3600 IN A {self.ct.ipv4}",
+        )
 
-            with out.section(f"cmdeploy run: {ct.sname} ({ct.domain})"):
-                out.print("Preparing chatmail.ini on builder ...")
-                write_ini(builder_ct, ct, disable_ipv6=ct.is_ipv6_disabled)
+        with self.out.section(f"cmdeploy run: {self.ct.shortname} ({self.ct.domain})"):
+            self.out.print("Preparing chatmail.ini on builder ...")
+            write_ini(self.bld_ct, self.ct, disable_ipv6=self.ct.is_ipv6_disabled)
+            self._run_cmdeploy("run", "--skip-dns-check")
 
-                # Use isolated relay directory on builder
-                repo_path = ct.get_repo_path(self.REPO_NAME)
+            # cmdeploy appends 9.9.9.9 to resolv.conf; restore clean state
+            self.out.print(f"Re-configuring DNS for {self.ct.shortname} ...")
+            self.ct.configure_dns(dns_ct.ipv4)
 
-                ret = self._run_cmdeploy(
-                    builder_ct, ct, "run", extra=["--skip-dns-check"]
-                )
-                if ret:
-                    out.red(f"Deploy to {ct.sname} failed (exit {ret})")
-                    return ret
+        with self.out.section(f"Loading DNS zone: {self.ct.shortname}"):
+            zone_path = f"{self.repo_path}/chatmail.zone"
+            self._run_cmdeploy("dns", "--zonefile", zone_path)
 
-                # cmdeploy appends 9.9.9.9 to resolv.conf; restore clean state
-                out.print(f"Re-configuring DNS for {ct.sname} ...")
-                ct.configure_dns(dns_ct.ipv4)
+            zone_content = self.bld_ct.bash(f"cat {zone_path}")
+            self.out.print("  Loading zone content into PowerDNS ...")
+            dns_ct.set_dns_records(self.ct.domain, zone_content)
 
-            # Generate DNS zone files and load into PowerDNS
-            with out.section(f"Loading DNS zone: {ct.sname}"):
-                repo_path = ct.get_repo_path(self.REPO_NAME)
-                zone_path = f"{repo_path}/chatmail.zone"
-                ret = self._run_cmdeploy(
-                    builder_ct,
-                    ct,
-                    "dns",
-                    extra=["--zonefile", zone_path],
-                )
-                if ret:
-                    out.red(f"DNS zone generation for {ct.sname} failed (exit {ret})")
-                    return ret
+        self.out.print(f"Restarting filtermail-incoming on {self.ct.shortname} ...")
+        self.ct.bash("systemctl restart filtermail-incoming")
 
-                # Get zonefile content from builder and load into PowerDNS
-                zone_content = builder_ct.bash(f"cat {zone_path}", check=False)
-                if zone_content:
-                    out.print("  Loading zone content into PowerDNS ...")
-                    dns_ct.set_dns_records(ct.domain, zone_content)
-                else:
-                    out.red(f"  Empty zone file for {ct.sname}")
+        if not self.ix.find_image([self.IMAGE_ALIAS]):
+            with self.out.section(f"Caching {self.IMAGE_ALIAS} image"):
+                self._publish_image()
 
-            out.print(f"Restarting filtermail-incoming on {ct.sname} ...")
-            ct.bash("systemctl restart filtermail-incoming")
+        with self.out.section("Verifying DNS records"):
+            self._run_cmdeploy("dns")
 
-            if not ix.find_image([self.IMAGE_ALIAS]):
-                with out.section(f"Caching {self.IMAGE_ALIAS} image"):
-                    self._publish_image(ct)
+        self.ct.write_deploy_state(CMDEPLOY, source=source)
 
-        # Final DNS verification
-        with out.section("Verifying DNS records"):
-            for ct in relays:
-                ret = self._run_cmdeploy(builder_ct, ct, "dns")
-                if ret:
-                    out.red(f"DNS verification for {ct.sname} failed (exit {ret})")
-                    return ret
-
-        # Record deploy state
-        desc = source.description if source else None
-        for ct in relays:
-            ct.write_deploy_state(CMDEPLOY, source_desc=desc)
-
-        elapsed = time.time() - t_total
-        out.section_line(f"deploy cmdeploy complete ({elapsed:.1f}s)")
-        return 0
-
-    def _run_cmdeploy(self, builder_ct, ct, subcmd, extra=None):
-        """Run ``cmdeploy`` inside the builder container."""
-        repo_path = ct.get_repo_path(self.REPO_NAME)
-        venv_path = ct.get_venv_path(self.REPO_NAME)
-        extra_str = " ".join(extra) if extra else ""
+    def _run_cmdeploy(self, subcmd, *extra):
+        extra_str = " ".join(extra)
         v_flag = " -" + "v" * self.out.verbosity if self.out.verbosity > 0 else ""
-        ini_path = f"{repo_path}/chatmail.ini"
+        ini_path = f"{self.repo_path}/chatmail.ini"
         cmd = (
-            f"incus exec {builder_ct.name} --"
+            f"incus exec {self.bld_ct.name} --"
             f" bash -c '"
-            f"source {venv_path}/bin/activate &&"
-            f" cd {repo_path} &&"
+            f"source {self.venv_path}/bin/activate &&"
+            f" cd {self.repo_path} &&"
             f" cmdeploy {subcmd}{v_flag}"
             f" --config {ini_path}"
             f" {extra_str}'"
         )
-        return self.out.shell(cmd)
+        ret = self.out.shell(cmd)
+        if ret:
+            raise SetupError(
+                f"cmdeploy {subcmd} failed on {self.ct.shortname} (exit {ret})"
+            )
 
-    def _publish_image(self, ct):
-        """Cache the current container state as the cmdeploy image."""
+    def _publish_image(self):
         if self.ix.find_image([self.IMAGE_ALIAS]):
             return
         self.out.print(
-            f"  Locally caching {ct.name!r} as {self.IMAGE_ALIAS!r} image ..."
+            f"  Locally caching {self.ct.name!r} as {self.IMAGE_ALIAS!r} image ..."
         )
         units = " ".join(f"{s}.service" for s in self._CACHED_DISABLE_SERVICES)
-        ct.bash("cp /etc/resolv.conf /tmp/resolv.conf.bak")
-        ct.bash(f"systemctl disable --now {units}")
-        ct.bash("rm -f /etc/resolv.conf")
-        self.ix.run(["publish", ct.name, f"--alias={self.IMAGE_ALIAS}", "--force"])
-        # Restore DNS and re-enable services on the running container
-        ct.bash("cp /tmp/resolv.conf.bak /etc/resolv.conf")
-        ct.bash(f"systemctl enable --now {units}")
-        ct.wait_ready()
+        self.ct.bash("cp /etc/resolv.conf /tmp/resolv.conf.bak")
+        self.ct.bash(f"systemctl disable --now {units}")
+        self.ct.bash("rm -f /etc/resolv.conf")
+        self.ix.run(["publish", self.ct.name, f"--alias={self.IMAGE_ALIAS}", "--force"])
+        self.ct.bash("cp /tmp/resolv.conf.bak /etc/resolv.conf")
+        self.ct.bash(f"systemctl enable --now {units}")
+        self.ct.wait_ready()
         self.out.print(f"  Image {self.IMAGE_ALIAS!r} ready.")
 
 
 # ------------------------------------------------------------------
-# Static helpers (also used by test-cmdeploy in cli.py)
+# Static helpers
 # ------------------------------------------------------------------
-
-
-def generate_chatmail_ini(builder_ct, ct, domain, overrides):
-    """Generate chatmail.ini inside the builder and return its content."""
-    overrides_str = ", ".join(
-        f"'{k}': '{v}'" if isinstance(v, str) else f"'{k}': {v}"
-        for k, v in overrides.items()
-    )
-    repo_path = ct.get_repo_path(CMDEPLOY)
-    ini_path = f"{repo_path}/chatmail.ini"
-    builder_ct.bash(f"""
-        source {ct.get_venv_path(CMDEPLOY)}/bin/activate
-        python3 -c "
-from chatmaild.config import write_initial_config
-from pathlib import Path
-write_initial_config(Path('{ini_path}'), '{domain}', {{{overrides_str}}})
-"
-    """)
-    return builder_ct.bash(f"cat {ini_path}")
 
 
 def write_ini(builder_ct, ct, disable_ipv6=False):
@@ -239,9 +180,17 @@ def write_ini(builder_ct, ct, disable_ipv6=False):
     }
     if disable_ipv6:
         overrides["disable_ipv6"] = "True"
-    generate_chatmail_ini(builder_ct, ct, ct.domain, overrides)
-
-
-def prepare_build_container(bld_ct, repo_path):
-    """Run the relay repo's own ``scripts/initenv.sh`` on the builder."""
-    bld_ct.bash(f"cd {repo_path} && bash scripts/initenv.sh")
+    overrides_str = ", ".join(
+        f"'{k}': '{v}'" if isinstance(v, str) else f"'{k}': {v}"
+        for k, v in overrides.items()
+    )
+    repo_path = ct.get_repo_path(CMDEPLOY)
+    ini_path = f"{repo_path}/chatmail.ini"
+    builder_ct.bash(f"""
+        source {repo_path}/venv/bin/activate
+        python3 -c "
+from chatmaild.config import write_initial_config
+from pathlib import Path
+write_initial_config(Path('{ini_path}'), '{ct.domain}', {{{overrides_str}}})
+"
+    """)

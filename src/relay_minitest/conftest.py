@@ -1,6 +1,5 @@
 import ssl
 
-import imap_tools
 import pytest
 from deltachat_rpc_client import Rpc
 from support import ChatmailACFactory, CMSetup, get_gencreds
@@ -98,15 +97,3 @@ def lp():
             print(f"     {msg}")
 
     return LP()
-
-
-@pytest.fixture
-def imap_mailbox(cmfactory, ssl_context):
-    (ac1,) = cmfactory.get_online_accounts(1)
-    user = ac1.get_config("addr")
-    password = ac1.get_config("mail_pw")
-    host = user.split("@")[1]
-    mailbox = imap_tools.MailBox(host, ssl_context=ssl_context)
-    mailbox.login(user, password)
-    mailbox.dc_ac = ac1
-    return mailbox

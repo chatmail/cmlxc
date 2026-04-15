@@ -8,8 +8,10 @@ and do not require DNS entries.
 
 import time
 
-from cmlxc.driver_base import Driver, parse_source
-from cmlxc.incus import MADMAIL, DeployConflictError
+from cmlxc.container import SetupError
+from cmlxc.driver_base import Driver
+
+MADMAIL = "madmail"
 
 
 class MadmailDriver(Driver):
@@ -19,112 +21,86 @@ class MadmailDriver(Driver):
     CLI_DOC = "Deploy a madmail relay service into a container."
     DEFAULT_SOURCE_URL = "https://github.com/themadorg/madmail.git"
     REPO_NAME = MADMAIL
-    NAME_EXAMPLES = "mad0 mad1"
     REQUIRED_SOURCE_PATHS = ["go.mod", "Makefile"]
 
-    def prep_builder(self, bld_ct, source=None):
-        """Perform one-time global preparation (toolchains, default checkouts)."""
-        if source is None:
-            source = parse_source("@main", self.DEFAULT_SOURCE_URL)
-
-        tmp_dest = f"/root/{self.REPO_NAME}-template"
-        bld_ct.setup_repo(tmp_dest, self.out, source)
-
-        self.out.print("  Ensuring build environment (Go) ...")
+    @classmethod
+    def on_prep_builder(cls, out, bld_ct, tmp_dest):
+        """Hook called by ``prep_builder`` to ensure the Go toolchain is ready."""
+        out.print("  Ensuring build environment (Go) ...")
         prepare_build_container(bld_ct, tmp_dest)
 
-    def init_builder(self, bld_ct, source, names):
-        """Set up the madmail template and copy for each relay."""
-        tmp_dest = f"/root/{self.REPO_NAME}-template"
-        self.prep_builder(bld_ct, source=source)
-
-        with self.out.section("Building maddy binary (once for this source)"):
-            self._build(bld_ct, tmp_dest)
-
-        for name in names:
-            ct = self.ix.get_container(name)
-            repo_path = ct.get_repo_path(self.REPO_NAME)
-            self.out.print(f"  Setting up {repo_path} ...")
-            bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
-
-    def run_deploy(self, names, bld_ct, *, source, ipv4_only=False):
-        """Ensure relay containers and deploy madmail."""
-        with self.out.section("Preparing container setup"):
-            self.ix.ensure_relay_containers(
-                names,
-                ipv4_only=ipv4_only,
-                image_candidates=None,
+    def on_init_relay(self, repo_path):
+        """Hook called by ``init_builder`` to build the maddy binary."""
+        with self.out.section(f"Building maddy binary for {self.ct.shortname}"):
+            self.bld_ct.bash(f"""
+                if [ -f '{repo_path}/admin-web/package.json' ]; then
+                    cd '{repo_path}/admin-web' && bun install
+                fi
+            """)
+            self.out.print(f"Compiling maddy in {repo_path} (make build) ...")
+            ret = self.out.shell(
+                f"incus exec {self.bld_ct.name} -- bash -c 'cd {repo_path} && make build'"
             )
-        try:
-            return self.deploy(names, bld_ct, source=source)
-        except DeployConflictError as exc:
-            self.out.red(f"Deploy conflict: {exc}")
-            return 1
+            if ret:
+                raise SetupError(f"maddy build failed in {repo_path} (exit {ret})")
 
-    def deploy(self, relay_names, builder_ct, source=None):
-        """Deploy madmail to relay containers."""
+    def get_test_domain_or_ip(self):
+        if not self.ct.ipv4:
+            self.ct.wait_ready()
+        return self.ct.ipv4
+
+    def run_deploy(self, *, source, ipv4_only=False):
+        """Deploy madmail to a single relay container."""
+        with self.out.section("Preparing container setup"):
+            self.ct.ensure(
+                ipv4_only=ipv4_only,
+            )
+        self.deploy(source=source)
+
+    def deploy(self, source=None):
+        """Deploy madmail services to a single relay container."""
         t_total = time.time()
-        out = self.out
-        ix = self.ix
 
-        relays = [ix.get_container(n) for n in relay_names]
+        self.ct.check_deploy_lock(MADMAIL)
 
-        # Check deploy locks
-        for ct in relays:
-            ct.check_deploy_lock(MADMAIL)
+        self.ix.write_ssh_config()
+        self.bld_ct.write_relay_ssh_config(self.ct)
 
-        ix.write_ssh_config()
+        if not self.ct.ipv4:
+            self.ct.wait_ready()
+        ip = self.ct.ipv4
 
-        # Set up SSH from builder to relay containers
-        builder_ct.setup_ssh(relays)
+        with self.out.section(f"madmail deploy: {self.ct.shortname} ({ip})"):
+            self.out.print("Pushing madmail binary via SCP ...")
+            self.ct.bash("rm -f /tmp/madmail")
+            self.bld_ct.scp_to_relay(
+                f"{self.repo_path}/build/maddy",
+                ip,
+                "/tmp/madmail",
+            )
+            self.ct.bash("chmod +x /tmp/madmail")
 
-        for ct in relays:
-            if not ct.ipv4:
-                ct.wait_ready()
-            ip = ct.ipv4
+            self.out.print(f"Running madmail install --simple --ip {ip} ...")
+            self.ct.bash("systemctl stop madmail || true")
+            self.ct.bash(f"/tmp/madmail install --simple --ip {ip}")
 
-            with out.section(f"madmail deploy: {ct.sname} ({ip})"):
-                out.print("Pushing madmail binary via SCP ...")
-                ct.bash("rm -f /tmp/madmail")
-                repo_path = ct.get_repo_path(self.REPO_NAME)
-                builder_ct.scp_to_relay(
-                    f"{repo_path}/build/maddy",
-                    ip,
-                    "/tmp/madmail",
-                )
-                ct.bash("chmod +x /tmp/madmail")
+            self.out.print("Starting madmail service ...")
+            self.ct.bash("systemctl daemon-reload")
+            self.ct.bash("systemctl enable madmail")
+            self.ct.bash("systemctl start madmail")
+            self.ct.bash("rm -f /tmp/madmail")
 
-                out.print(f"Running madmail install --simple --ip {ip} ...")
-                ct.bash("systemctl stop madmail || true")
-                ct.bash(f"/tmp/madmail install --simple --ip {ip}")
-
-                out.print("Starting madmail service ...")
-                ct.bash("systemctl daemon-reload")
-                ct.bash("systemctl enable madmail")
-                ct.bash("systemctl start madmail")
-                ct.bash("rm -f /tmp/madmail")
-
-                desc = source.description if source else None
-                ct.write_deploy_state(MADMAIL, source_desc=desc)
-                out.green(f"madmail deployed to {ct.sname} ({ip})")
+            self.ct.write_deploy_state(MADMAIL, source=source)
+            self.out.green(f"madmail deployed to {self.ct.shortname} ({ip})")
 
         elapsed = time.time() - t_total
-        out.section_line(f"deploy madmail complete ({elapsed:.1f}s)")
-        return 0
+        self.out.section_line(f"deploy madmail complete ({elapsed:.1f}s)")
 
-    def _build(self, builder_ct, repo_path):
-        """Compile the maddy binary inside the builder."""
-        self.out.print(f"Compiling maddy in {repo_path} (make build) ...")
-        ret = self.out.shell(
-            f"incus exec {builder_ct.name} -- bash -c 'cd {repo_path} && make build'"
-        )
-        if ret:
-            raise RuntimeError(f"maddy build failed in {repo_path} (exit {ret})")
 
 
 def prepare_build_container(bld_ct, go_mod_path):
     """Install or update Go inside the builder according to go.mod."""
-    bld_ct.bash(f"""
+    bld_ct.bash("""
         if ! command -v node >/dev/null 2>&1 || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 22 ]; then
             apt-get -o DPkg::Lock::Timeout=60 update
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl unzip
@@ -134,9 +110,6 @@ def prepare_build_container(bld_ct, go_mod_path):
         if ! command -v bun >/dev/null 2>&1; then
             curl -fsSL https://bun.sh/install | bash
             ln -sf /root/.bun/bin/bun /usr/local/bin/bun
-        fi
-        if [ -f "{go_mod_path}/admin-web/package.json" ]; then
-            cd "{go_mod_path}/admin-web" && bun install
         fi
     """)
     bld_ct.bash(f"""

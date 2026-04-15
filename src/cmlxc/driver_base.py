@@ -1,9 +1,7 @@
 """Base class for cmlxc deployment drivers.
 
-Each driver subclass defines CLI metadata, builder setup,
-and deploy orchestration.  The ``cli`` module discovers
-drivers via the ``DEPLOY_DRIVERS`` list and generates
-subcommands automatically.
+Each driver subclass defines CLI metadata,
+builder setup, and deploy orchestration hooks.
 """
 
 import re
@@ -17,12 +15,12 @@ try:
 except PackageNotFoundError:
     __version__ = "unknown"
 
-from cmlxc.incus import (
+from cmlxc.container import (
     BASE_IMAGE_ALIAS,
-    BUILDER_CONTAINER_NAME,
     DNS_CONTAINER_NAME,
-    Incus,
+    BuilderContainer,
 )
+from cmlxc.incus import Incus
 
 
 @dataclass
@@ -87,12 +85,14 @@ class Driver:
     DEFAULT_SOURCE_URL: str
     REPO_NAME: str
     IMAGE_ALIAS: str | None = None
-    NAME_EXAMPLES: str = "r0 r1"
     REQUIRED_SOURCE_PATHS: list[str] = []
 
-    def __init__(self, ix, out):
-        self.ix = ix
+    def __init__(self, ct, out):
+        self.ct = ct
+        self.ix = ct.incus
         self.out = out
+        self.repo_path = f"/root/{self.REPO_NAME}-{ct.shortname}"
+        self.venv_path = f"{self.repo_path}/venv"
 
     # ------------------------------------------------------------------
     # Pre-flight checks (shared by all drivers)
@@ -100,10 +100,10 @@ class Driver:
 
     def check_init(self):
         """Verify that the cmlxc environment has been initialized."""
-        dns_ct = self.ix.get_container(DNS_CONTAINER_NAME)
         managed = self.ix.list_managed()
         dns_running = any(
-            c["name"] == dns_ct.name and c["status"] == "Running" for c in managed
+            c["name"] == DNS_CONTAINER_NAME and c["status"] == "Running"
+            for c in managed
         )
         if not dns_running or not self.ix.find_image([BASE_IMAGE_ALIAS]):
             self.out.red("Error: cmlxc environment not initialized.")
@@ -114,12 +114,16 @@ class Driver:
         return True
 
     def get_builder(self):
-        """Return the running builder container, or None."""
-        bld_ct = self.ix.get_container(BUILDER_CONTAINER_NAME)
+        """Return the running builder container, or None.
+
+        Stores the result as ``self.bld_ct`` for later use.
+        """
+        bld_ct = BuilderContainer(self.ix)
         if not bld_ct.is_running:
             self.out.red("Builder container not running.")
             self.out.red("Run 'cmlxc init' first.")
             return None
+        self.bld_ct = bld_ct
         return bld_ct
 
     # ------------------------------------------------------------------
@@ -136,10 +140,9 @@ class Driver:
             help="Driver source: @ref, /path, ./path, or URL@ref (default: @main).",
         )
         action = parser.add_argument(
-            "names",
-            nargs="+",
+            "name",
             metavar="NAME",
-            help=f"One or more relay names (e.g. {cls.NAME_EXAMPLES}).",
+            help="Relay name.",
         )
         if completer is not None:
             action.completer = completer
@@ -172,17 +175,77 @@ class Driver:
             return False
         return True
 
-    def init_builder(self, bld_ct, source, names):
-        """Prepare the builder container for this driver and these relays."""
-        raise NotImplementedError
-
-    def prep_builder(self, bld_ct):
-        """Perform one-time global preparation (toolchains, default checkouts)."""
+    @classmethod
+    def on_prep_builder(cls, out, bld_ct, tmp_dest):
+        """Hook called by ``prep_builder`` after the git-main checkout is ready."""
         pass
 
-    def run_deploy(self, names, bld_ct, *, source, ipv4_only):
-        """Ensure relay containers and run the deployment."""
+    def on_init_relay(self, repo_path):
+        """Hook called by ``init_builder`` after a relay checkout is ready."""
+        pass
+
+    def get_git_main_path(self):
+        """Return path to the persistent git-main checkout on the builder."""
+        return f"/root/{self.REPO_NAME}-git-main"
+
+    @classmethod
+    def prep_builder(cls, ix, out, bld_ct):
+        """Hook called by ``cmlxc init`` to prepare toolchains and main checkout."""
+        tmp_dest = f"/root/{cls.REPO_NAME}-git-main"
+        if bld_ct.bash(f"test -d {tmp_dest}", check=False) is None:
+            source = parse_source("@main", cls.DEFAULT_SOURCE_URL)
+            bld_ct.setup_repo(tmp_dest, out, source)
+        else:
+            out.print(f"  Fetching {cls.REPO_NAME}-git-main from upstream ...")
+            bld_ct.bash(f"cd {tmp_dest} && git fetch origin")
+
+        # Driver-specific toolchain setup
+        cls.on_prep_builder(out, bld_ct, tmp_dest)
+
+    def init_builder(self, source):
+        """Hook called by ``deploy-*`` to prepare a relay checkout and build."""
+        self.prep_builder(self.ix, self.out, self.bld_ct)
+        tmp_dest = self.get_git_main_path()
+        repo_path = self.repo_path
+
+        if source.kind == "remote":
+            self.out.print(
+                f"  Copying {self.REPO_NAME}-git-main to {repo_path} on builder"
+            )
+            self.bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
+            if source.ref != "main":
+                self.out.print(f"  Checking out {source.ref!r} ...")
+            self.bld_ct.bash(f"""
+                cd {repo_path}
+                git checkout -q {source.ref}
+                git reset --hard -q origin/{source.ref} 2>/dev/null || true
+                git clean -fdx
+                if [ -f .gitmodules ]; then
+                    git config --global url."https://github.com/".insteadOf git@github.com:
+                    git submodule update --init --recursive
+                fi
+            """)
+        else:
+            self.out.print(
+                f"  Preparing {self.ct.shortname} checkout from local path ..."
+            )
+            self.bld_ct.bash(f"rm -rf {repo_path}")
+            self.bld_ct.sync_to(source.path, repo_path)
+
+        # Relay-specific preparation (e.g. build binary, init venv)
+        self.on_init_relay(repo_path)
+
+    def run_deploy(self, *, source, ipv4_only):
+        """Perform the driver-specific deployment.
+
+        Subclasses must implement.
+        Raises ``SetupError`` on failure.
+        """
         raise NotImplementedError
+
+    def get_test_domain_or_ip(self):
+        """Return the address used by test commands."""
+        return self.ct.domain
 
     # ------------------------------------------------------------------
     # Subcommand factory
@@ -194,18 +257,18 @@ class Driver:
 
         def cmd(args, out):
             try:
-                for name in args.names:
-                    validate_relay_name(name)
+                validate_relay_name(args.name)
             except ValueError as exc:
                 out.red(str(exc))
                 return 1
 
-            driver = cls(Incus(out), out)
+            ix = Incus(out)
+            ct = ix.get_relay_container(args.name)
+            driver = cls(ct, out)
             if not driver.check_init():
                 return 1
 
-            bld_ct = driver.get_builder()
-            if not bld_ct:
+            if not driver.get_builder():
                 return 1
 
             source = parse_source(args.source, cls.DEFAULT_SOURCE_URL)
@@ -215,14 +278,13 @@ class Driver:
             out.print(f"cmlxc {__version__}")
             with out.section(f"Preparing {cls.CLI_NAME} source in builder"):
                 out.print(f"  Source: {source.description}")
-                driver.init_builder(bld_ct, source=source, names=args.names)
+                driver.init_builder(source=source)
 
-            return driver.run_deploy(
-                args.names,
-                bld_ct,
+            driver.run_deploy(
                 source=source,
                 ipv4_only=args.ipv4_only,
             )
+            return 0
 
         cmd.__doc__ = cls.CLI_DOC
         return cmd

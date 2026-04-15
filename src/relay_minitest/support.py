@@ -8,8 +8,6 @@ from deltachat_rpc_client import DeltaChat
 
 
 class ImapConn:
-    AuthError = imaplib.IMAP4.error
-
     def __init__(self, host, ssl_context=None):
         self.host = host
         self.ssl_context = ssl_context
@@ -22,26 +20,8 @@ class ImapConn:
         print(f"imap-login {user!r} {password!r}")
         self.conn.login(user, password)
 
-    def fetch_all(self):
-        status, res = self.conn.select()
-        if int(res[0]) == 0:
-            return []
-        status, results = self.conn.fetch("1:*", "(RFC822)")
-        assert status == "OK"
-        return results
-
-    def fetch_all_messages(self):
-        results = self.fetch_all()
-        messages = []
-        for item in results:
-            if len(item) == 2:
-                messages.append(item[1].decode())
-        return messages
-
 
 class SmtpConn:
-    AuthError = smtplib.SMTPAuthenticationError
-
     def __init__(self, host, ssl_context=None):
         self.host = host
         self.ssl_context = ssl_context
@@ -114,7 +94,7 @@ class CMSetup:
 
     def gen_users(self, num):
         users = []
-        for i in range(num):
+        for _ in range(num):
             addr, password = self.gencreds()
             user = CMUser(self.maildomain, addr, password, self.ssl_context)
             assert user.smtp

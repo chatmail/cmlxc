@@ -2,15 +2,17 @@
 
 import pytest
 
-from cmlxc.incus import (
-    ContainerBuilder,
-    DeployConflictError,
+from cmlxc.container import (
+    BuilderContainer,
     DNSContainer,
-    Incus,
     RelayContainer,
+    SetupError,
     _extract_ip,
-    _is_ip_address,
     format_ssh_config,
+)
+from cmlxc.incus import (
+    Incus,
+    _is_ip_address,
 )
 from cmlxc.output import Out
 
@@ -60,7 +62,7 @@ def test_get_container_name():
 
 def test_relay_container_naming(ix):
     ct = RelayContainer(ix, "t0")
-    assert ct.sname == "t0"
+    assert ct.shortname == "t0"
     assert ct.name == "t0-localchat"
     assert ct.domain == "_t0.localchat"
     # repo and venv paths on builder
@@ -68,12 +70,12 @@ def test_relay_container_naming(ix):
     assert ct.get_venv_path("cmdeploy") == "/root/cmdeploy-t0/venv"
 
 
-def test_get_container_dispatch(ix):
-    assert isinstance(ix.get_container("ns-localchat"), DNSContainer)
-    assert isinstance(ix.get_container("builder-localchat"), ContainerBuilder)
-    ct = ix.get_container("t0")
+def test_typed_container_constructors(ix):
+    assert isinstance(DNSContainer(ix), DNSContainer)
+    assert isinstance(BuilderContainer(ix), BuilderContainer)
+    ct = ix.get_relay_container("t0")
     assert isinstance(ct, RelayContainer)
-    assert ct.sname == "t0"
+    assert ct.shortname == "t0"
 
 
 def test_format_ssh_config():
@@ -102,7 +104,7 @@ def test_check_deploy_lock(ix):
 
     # different driver — should raise
     ct._deploy_state_override = {"driver": "madmail", "timestamp": "now"}
-    with pytest.raises(DeployConflictError, match="madmail"):
+    with pytest.raises(SetupError, match="madmail"):
         ct.check_deploy_lock("cmdeploy")
 
     ct.get_deploy_state = original

@@ -59,7 +59,7 @@ Re-initialize from scratch (destroys everything first):
 **Deploy chatmail relays** (creates containers if needed, then deploys).
 The `--source` argument controls where the code comes from:
 
-    cmlxc deploy-cmdeploy --source @main cm0 cm1
+    cmlxc deploy-cmdeploy --source @main cm0
     cmlxc deploy-madmail  --source @main mad1
     cmlxc deploy-madmail  --source @main --ipv4-only mad1
 
@@ -170,7 +170,7 @@ Each relay is locked to a single deployment driver (`cmdeploy` or
 Drivers live in `driver_cmdeploy.py` and `driver_madmail.py`.
 Each driver module exports its CLI subcommand metadata,
 builder init, and deploy orchestration.
-`cli.py` generates the `deploy-*` subcommands from a `DEPLOY_DRIVERS` list.
+`cli.py` generates the `deploy-*` subcommands from a `DRIVER_BY_NAME` mapping.
 
 
 - **cmdeploy** -- runs `cmdeploy run` from the builder container over SSH
