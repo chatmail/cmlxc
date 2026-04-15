@@ -178,7 +178,8 @@ def print_admin_info(out, ct, ip):
         status = ct.bash("madmail admin-web status", check=False) or ""
         enabled, path = _parse_admin_web_status(status)
         if enabled and path:
-            out.print(f"admin-url: https://{ip}{path}/")
+            out.print(f"admin web: https://{ip}{path}/")
+            out.print(f"admin API: https://{ip}/api/admin")
         else:
             out.print("admin-url: disabled")
     except Exception:
