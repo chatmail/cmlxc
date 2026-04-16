@@ -15,7 +15,40 @@ on:
         type: string
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      count: ${{ steps.parse.outputs.count }}
+      cmd1: ${{ steps.parse.outputs.cmd1 }}
+      cmd2: ${{ steps.parse.outputs.cmd2 }}
+      cmd3: ${{ steps.parse.outputs.cmd3 }}
+      cmd4: ${{ steps.parse.outputs.cmd4 }}
+      cmd5: ${{ steps.parse.outputs.cmd5 }}
+      cmd6: ${{ steps.parse.outputs.cmd6 }}
+      cmd7: ${{ steps.parse.outputs.cmd7 }}
+      cmd8: ${{ steps.parse.outputs.cmd8 }}
+      cmd9: ${{ steps.parse.outputs.cmd9 }}
+      cmd10: ${{ steps.parse.outputs.cmd10 }}
+      cmd11: ${{ steps.parse.outputs.cmd11 }}
+      cmd12: ${{ steps.parse.outputs.cmd12 }}
+    steps:
+      - name: Parse cmlxc commands
+        id: parse
+        shell: bash
+        run: |
+          i=1
+          while IFS= read -r line || [ -n "$line" ]; do
+            trimmed=$(echo "$line" | xargs)
+            [[ -z "$trimmed" || "$trimmed" == "#"* ]] && continue
+            echo "cmd${i}=${trimmed}" >> "$GITHUB_OUTPUT"
+            i=$((i+1))
+          done <<'EOF'
+          ${{ inputs.cmlxc_commands }}
+          EOF
+          echo "count=$((i-1))" >> "$GITHUB_OUTPUT"
+
   lxc-test:
+    needs: plan
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -77,73 +110,56 @@ jobs:
             fi
           done
 
-      - name: Parse cmlxc commands
-        id: parse
-        shell: bash
-        run: |
-          i=1
-          while IFS= read -r line || [ -n "$line" ]; do
-            # Trim leading/trailing whitespace
-            trimmed=$(echo "$line" | xargs)
-            # Skip empty lines and comments
-            [[ -z "$trimmed" || "$trimmed" == "#"* ]] && continue
-            echo "cmd${i}=${trimmed}" >> "$GITHUB_OUTPUT"
-            i=$((i+1))
-          done <<'EOF'
-          ${{ inputs.cmlxc_commands }}
-          EOF
-          echo "count=$((i-1))" >> "$GITHUB_OUTPUT"
+      - name: "cmlxc: ${{ needs.plan.outputs.cmd1 }}"
+        if: needs.plan.outputs.count >= 1
+        run: ${{ needs.plan.outputs.cmd1 }}
 
-      - name: "cmlxc: ${{ steps.parse.outputs.cmd1 }}"
-        if: steps.parse.outputs.count >= 1
-        run: ${{ steps.parse.outputs.cmd1 }}
+      - name: "cmlxc: ${{ needs.plan.outputs.cmd2 }}"
+        if: needs.plan.outputs.count >= 2
+        run: ${{ needs.plan.outputs.cmd2 }}
 
-      - name: "cmlxc: ${{ steps.parse.outputs.cmd2 }}"
-        if: steps.parse.outputs.count >= 2
-        run: ${{ steps.parse.outputs.cmd2 }}
+      - name: "cmlxc: ${{ needs.plan.outputs.cmd3 }}"
+        if: needs.plan.outputs.count >= 3
+        run: ${{ needs.plan.outputs.cmd3 }}
 
-      - name: "cmlxc: ${{ steps.parse.outputs.cmd3 }}"
-        if: steps.parse.outputs.count >= 3
-        run: ${{ steps.parse.outputs.cmd3 }}
+      - name: "cmlxc: ${{ needs.plan.outputs.cmd4 }}"
+        if: needs.plan.outputs.count >= 4
+        run: ${{ needs.plan.outputs.cmd4 }}
 
-      - name: "cmlxc: ${{ steps.parse.outputs.cmd4 }}"
-        if: steps.parse.outputs.count >= 4
-        run: ${{ steps.parse.outputs.cmd4 }}
+      - name: "cmlxc: ${{ needs.plan.outputs.cmd5 }}"
+        if: needs.plan.outputs.count >= 5
+        run: ${{ needs.plan.outputs.cmd5 }}
 
-      - name: "cmlxc: ${{ steps.parse.outputs.cmd5 }}"
-        if: steps.parse.outputs.count >= 5
-        run: ${{ steps.parse.outputs.cmd5 }}
+      - name: "cmlxc: ${{ needs.plan.outputs.cmd6 }}"
+        if: needs.plan.outputs.count >= 6
+        run: ${{ needs.plan.outputs.cmd6 }}
 
-      - name: "cmlxc: ${{ steps.parse.outputs.cmd6 }}"
-        if: steps.parse.outputs.count >= 6
-        run: ${{ steps.parse.outputs.cmd6 }}
+      - name: "cmlxc: ${{ needs.plan.outputs.cmd7 }}"
+        if: needs.plan.outputs.count >= 7
+        run: ${{ needs.plan.outputs.cmd7 }}
 
-      - name: "cmlxc: ${{ steps.parse.outputs.cmd7 }}"
-        if: steps.parse.outputs.count >= 7
-        run: ${{ steps.parse.outputs.cmd7 }}
+      - name: "cmlxc: ${{ needs.plan.outputs.cmd8 }}"
+        if: needs.plan.outputs.count >= 8
+        run: ${{ needs.plan.outputs.cmd8 }}
 
-      - name: "cmlxc: ${{ steps.parse.outputs.cmd8 }}"
-        if: steps.parse.outputs.count >= 8
-        run: ${{ steps.parse.outputs.cmd8 }}
+      - name: "cmlxc: ${{ needs.plan.outputs.cmd9 }}"
+        if: needs.plan.outputs.count >= 9
+        run: ${{ needs.plan.outputs.cmd9 }}
 
-      - name: "cmlxc: ${{ steps.parse.outputs.cmd9 }}"
-        if: steps.parse.outputs.count >= 9
-        run: ${{ steps.parse.outputs.cmd9 }}
+      - name: "cmlxc: ${{ needs.plan.outputs.cmd10 }}"
+        if: needs.plan.outputs.count >= 10
+        run: ${{ needs.plan.outputs.cmd10 }}
 
-      - name: "cmlxc: ${{ steps.parse.outputs.cmd10 }}"
-        if: steps.parse.outputs.count >= 10
-        run: ${{ steps.parse.outputs.cmd10 }}
+      - name: "cmlxc: ${{ needs.plan.outputs.cmd11 }}"
+        if: needs.plan.outputs.count >= 11
+        run: ${{ needs.plan.outputs.cmd11 }}
 
-      - name: "cmlxc: ${{ steps.parse.outputs.cmd11 }}"
-        if: steps.parse.outputs.count >= 11
-        run: ${{ steps.parse.outputs.cmd11 }}
-
-      - name: "cmlxc: ${{ steps.parse.outputs.cmd12 }}"
-        if: steps.parse.outputs.count >= 12
-        run: ${{ steps.parse.outputs.cmd12 }}
+      - name: "cmlxc: ${{ needs.plan.outputs.cmd12 }}"
+        if: needs.plan.outputs.count >= 12
+        run: ${{ needs.plan.outputs.cmd12 }}
 
       - name: Run remaining cmlxc commands
-        if: steps.parse.outputs.count > 12
+        if: needs.plan.outputs.count > 12
         env:
           CMLXC_COMMANDS: ${{ inputs.cmlxc_commands }}
         run: |
@@ -188,3 +204,4 @@ jobs:
               fi
             fi
           done
+
