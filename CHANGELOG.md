@@ -1,10 +1,28 @@
 # Changelog
 
+## [0.9.0] - 2026-04-16
+
+### Features / Changes
+
+- "cmlxc status" can now take one or multiple hosts.
+
+- "cmlxc test-*" now supports mixed cmdeploy/madmail testing.
+
+### Refactor
+
+- wait for relay services to become ready.
+
+- streamline wait/timeout from the various call sites.
+
 ## [0.8.1] - 2026-04-15
 
-- minimize cached builder images.
+### Miscellaneous Tasks
 
-- small CLI output improvements 
+- release v0.8.1.
+
+### Other
+
+- minimize cached builder images.
 
 ## [0.8.0] - 2026-04-15
 
@@ -179,6 +197,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.9.0]: https://github.com/chatmail/cmlxc/compare/v0.8.1..v0.9.0
 [0.8.1]: https://github.com/chatmail/cmlxc/compare/v0.8.0..v0.8.1
 [0.8.0]: https://github.com/chatmail/cmlxc/compare/v0.7.5..v0.8.0
 [0.7.5]: https://github.com/chatmail/cmlxc/compare/v0.7.4..v0.7.5
