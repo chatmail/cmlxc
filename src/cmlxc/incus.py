@@ -288,4 +288,6 @@ class Incus:
         if data[0].get("status") != "Running":
             self.out.print(f"Starting container {ct.name!r} ...")
             ct.start()
+            ct.wait_ready()
+            ct.wait_services()
         return ct

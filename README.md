@@ -84,8 +84,10 @@ builder (wipe-and-reclone).
 **Run integration tests** inside the builder:
 
     cmlxc test-mini cm0
-    cmlxc test-mini cm0 cm1          # cross-relay tests
+    cmlxc test-mini cm0 cm1          # cross-relay tests (domain-based)
+    cmlxc test-mini cm0 mad1         # cross-relay tests (mixed)
     cmlxc test-cmdeploy cm0 cm1
+    cmlxc test-madmail mad1
 
 
 **SSH into a deployed relay:**

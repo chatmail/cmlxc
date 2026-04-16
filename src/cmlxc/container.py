@@ -6,6 +6,7 @@ All interaction with Incus containers goes through these types.
 """
 
 import shlex
+import socket
 import subprocess
 import textwrap
 import time
@@ -330,6 +331,7 @@ class RelayContainer(Container):
         else:
             self.launch(image_candidates=image_candidates)
         self.wait_ready(expect_ipv6=not ipv4_only)
+        self.wait_services()
         if ipv4_only:
             self.disable_ipv6()
 
@@ -355,6 +357,30 @@ class RelayContainer(Container):
                 " add to ~/.ssh/config:"
             )
             sub.green(f"    Include {self.incus.ssh_config_path}")
+
+    def wait_services(self, timeout=10):
+        """Wait for SMTP (25) and IMAPS (993) to be ready on the container IP."""
+        if not self.ipv4:
+            return
+
+        self.out.print("  Waiting for services (SMTP, IMAPS) ...")
+        deadline = time.time() + timeout
+        ports = [25, 993]
+        while time.time() < deadline:
+            for port in list(ports):
+                try:
+                    with socket.create_connection((self.ipv4, port), timeout=0.5):
+                        ports.remove(port)
+                except (OSError, ConnectionRefusedError):
+                    pass
+            if not ports:
+                return
+            time.sleep(0.5)
+
+        if ports:
+            self.out.print(
+                f"  Warning: Services on ports {ports} not ready after {timeout}s"
+            )
 
     def disable_ipv6(self):
         # incus provides net.* virtualization for LXC containers so that
