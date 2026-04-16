@@ -77,25 +77,88 @@ jobs:
             fi
           done
 
-      - name: Run cmlxc commands
+      - name: Parse cmlxc commands
+        id: parse
+        shell: bash
+        run: |
+          i=1
+          while IFS= read -r line || [ -n "$line" ]; do
+            # Trim leading/trailing whitespace
+            trimmed=$(echo "$line" | xargs)
+            # Skip empty lines and comments
+            [[ -z "$trimmed" || "$trimmed" == "#"* ]] && continue
+            echo "cmd${i}=${trimmed}" >> "$GITHUB_OUTPUT"
+            i=$((i+1))
+          done <<'EOF'
+          ${{ inputs.cmlxc_commands }}
+          EOF
+          echo "count=$((i-1))" >> "$GITHUB_OUTPUT"
+
+      - name: "cmlxc: ${{ steps.parse.outputs.cmd1 }}"
+        if: steps.parse.outputs.count >= 1
+        run: ${{ steps.parse.outputs.cmd1 }}
+
+      - name: "cmlxc: ${{ steps.parse.outputs.cmd2 }}"
+        if: steps.parse.outputs.count >= 2
+        run: ${{ steps.parse.outputs.cmd2 }}
+
+      - name: "cmlxc: ${{ steps.parse.outputs.cmd3 }}"
+        if: steps.parse.outputs.count >= 3
+        run: ${{ steps.parse.outputs.cmd3 }}
+
+      - name: "cmlxc: ${{ steps.parse.outputs.cmd4 }}"
+        if: steps.parse.outputs.count >= 4
+        run: ${{ steps.parse.outputs.cmd4 }}
+
+      - name: "cmlxc: ${{ steps.parse.outputs.cmd5 }}"
+        if: steps.parse.outputs.count >= 5
+        run: ${{ steps.parse.outputs.cmd5 }}
+
+      - name: "cmlxc: ${{ steps.parse.outputs.cmd6 }}"
+        if: steps.parse.outputs.count >= 6
+        run: ${{ steps.parse.outputs.cmd6 }}
+
+      - name: "cmlxc: ${{ steps.parse.outputs.cmd7 }}"
+        if: steps.parse.outputs.count >= 7
+        run: ${{ steps.parse.outputs.cmd7 }}
+
+      - name: "cmlxc: ${{ steps.parse.outputs.cmd8 }}"
+        if: steps.parse.outputs.count >= 8
+        run: ${{ steps.parse.outputs.cmd8 }}
+
+      - name: "cmlxc: ${{ steps.parse.outputs.cmd9 }}"
+        if: steps.parse.outputs.count >= 9
+        run: ${{ steps.parse.outputs.cmd9 }}
+
+      - name: "cmlxc: ${{ steps.parse.outputs.cmd10 }}"
+        if: steps.parse.outputs.count >= 10
+        run: ${{ steps.parse.outputs.cmd10 }}
+
+      - name: "cmlxc: ${{ steps.parse.outputs.cmd11 }}"
+        if: steps.parse.outputs.count >= 11
+        run: ${{ steps.parse.outputs.cmd11 }}
+
+      - name: "cmlxc: ${{ steps.parse.outputs.cmd12 }}"
+        if: steps.parse.outputs.count >= 12
+        run: ${{ steps.parse.outputs.cmd12 }}
+
+      - name: Run remaining cmlxc commands
+        if: steps.parse.outputs.count > 12
         env:
           CMLXC_COMMANDS: ${{ inputs.cmlxc_commands }}
         run: |
           set -eu
-          echo "$CMLXC_COMMANDS" | while IFS= read -r cmd || [ -n "$cmd" ]; do
-            # Trim leading/trailing whitespace
-            cmd="${cmd#"${cmd%%[![:space:]]*}"}"
-            cmd="${cmd%"${cmd##*[![:space:]]}"}"
+          i=0
+          while IFS= read -r cmd || [ -n "$cmd" ]; do
+            trimmed=$(echo "$cmd" | xargs)
+            [[ -z "$trimmed" || "$trimmed" == "#"* ]] && continue
+            i=$((i+1))
+            if [ $i -le 12 ]; then continue; fi
 
-            [[ -z "$cmd" || "$cmd" == "#"* ]] && continue
-
-            echo "::group::Run: $cmd"
-            eval "$cmd" || {
-              echo "::endgroup::"
-              exit 1
-            }
+            echo "::group::Run: $trimmed"
+            eval "$trimmed" || { echo "::endgroup::"; exit 1; }
             echo "::endgroup::"
-          done
+          done <<< "$CMLXC_COMMANDS"
 
       - name: Show container logs on failure
         if: failure()
