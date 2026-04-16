@@ -98,6 +98,8 @@ builder (wipe-and-reclone).
 **Lifecycle commands:**
 
     cmlxc status                # show all containers
+    cmlxc status cm0            # show only cm0
+    cmlxc status cm0 mad1       # show multiple containers
     cmlxc status --host         # show DNS/SSH setup instructions
     cmlxc start cm0             # restart a stopped relay
     cmlxc stop cm0 cm1          # stop relays

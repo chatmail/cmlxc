@@ -56,6 +56,7 @@ def test_init():
 
 def test_status():
     cmlxc("status")
+    cmlxc("status", "builder")
 
 
 # ---- cmdeploy cycle -------------------------------------------------------

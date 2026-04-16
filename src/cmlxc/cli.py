@@ -406,9 +406,10 @@ def test_mini_cmd(args, out):
 
 def status_cmd_options(parser):
     parser.add_argument(
-        "name",
-        nargs="?",
-        help="Optional container name (short or long) to show.",
+        "names",
+        nargs="*",
+        metavar="NAME",
+        help="Optional container name(s) (short or long) to show.",
     ).completer = _container_completer
     parser.add_argument(
         "--host",
@@ -421,14 +422,25 @@ def status_cmd(args, out):
     """Show status of managed containers and host configuration."""
     ix = Incus(out)
     containers = ix.list_managed()
-    if args.name:
-        long_name = ix.get_container_name(args.name)
-        containers = [c for c in containers if c["name"] in (args.name, long_name)]
+
+    if args.names:
+        matched = []
+        seen = set()
+        for name in args.names:
+            long_name = ix.get_container_name(name)
+            found = [c for c in containers if c["name"] in (name, long_name)]
+            if found:
+                for c in found:
+                    if c["name"] not in seen:
+                        seen.add(c["name"])
+                        matched.append(c)
+            else:
+                out.red(f"Container {name!r} not found.")
+        containers = matched
+        if not containers:
+            return 1
 
     if not containers:
-        if args.name:
-            out.red(f"Container {args.name!r} not found.")
-            return 1
         out.print("No cmlxc-managed containers found.")
         return 0
 
@@ -451,7 +463,7 @@ def status_cmd(args, out):
         if c["name"] == DNS_CONTAINER_NAME:
             dns_ip = c["ip"]
 
-    if args.name:
+    if args.names and not args.host:
         return 0
 
     out.section_line("Host ssh and DNS configuration (not required for cmlxc itself)")
