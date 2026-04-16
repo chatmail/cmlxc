@@ -78,7 +78,24 @@ jobs:
           done
 
       - name: Run cmlxc commands
-        run: ${{ inputs.cmlxc_commands }}
+        env:
+          CMLXC_COMMANDS: ${{ inputs.cmlxc_commands }}
+        run: |
+          set -eu
+          echo "$CMLXC_COMMANDS" | while IFS= read -r cmd || [ -n "$cmd" ]; do
+            # Trim leading/trailing whitespace
+            cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+            cmd="${cmd%"${cmd##*[![:space:]]}"}"
+
+            [[ -z "$cmd" || "$cmd" == "#"* ]] && continue
+
+            echo "::group::Run: $cmd"
+            eval "$cmd" || {
+              echo "::endgroup::"
+              exit 1
+            }
+            echo "::endgroup::"
+          done
 
       - name: Show container logs on failure
         if: failure()

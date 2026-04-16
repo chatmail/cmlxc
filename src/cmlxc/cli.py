@@ -282,6 +282,10 @@ def test_cmdeploy_cmd(args, out):
 
         # Cross-relay DNS check
         for a, b in [(ct, ct2), (ct2, ct)]:
+            drv_b = DRIVER_BY_NAME[b.driver_name](b, out)
+            if _is_ip_address(drv_b.get_test_domain_or_ip()):
+                continue
+
             mx = a.bash(f"dig {b.domain} MX +short", check=False)
             if not mx or not mx.strip():
                 out.red(f"DNS check failed: {a.name} cannot resolve MX for {b.domain}")
