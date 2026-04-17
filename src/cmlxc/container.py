@@ -169,9 +169,36 @@ class Container:
         if existing:
             if existing[0]["status"] != "Running":
                 self.start()
+            if not ipv4_only:
+                self.enable_ipv6()
         else:
             self.launch(image_candidates=image_candidates)
         self.wait_ready(expect_ipv6=not ipv4_only)
+        if ipv4_only:
+            self.disable_ipv6()
+
+    def disable_ipv6(self):
+        # incus provides net.* virtualization for LXC containers so that
+        # these sysctls only affect the container's network namespace.
+        self.bash("""
+            sysctl -w net.ipv6.conf.all.disable_ipv6=1
+            sysctl -w net.ipv6.conf.default.disable_ipv6=1
+        """)
+        self.push_file_content(
+            "/etc/sysctl.d/99-disable-ipv6.conf",
+            """
+            net.ipv6.conf.all.disable_ipv6=1
+            net.ipv6.conf.default.disable_ipv6=1
+            """,
+        )
+        self.ipv6 = None
+
+    def enable_ipv6(self):
+        self.bash("""
+            rm -f /etc/sysctl.d/99-disable-ipv6.conf
+            sysctl -w net.ipv6.conf.all.disable_ipv6=0
+            sysctl -w net.ipv6.conf.default.disable_ipv6=0
+        """)
 
     def destroy(self):
         self.stop(force=True)
@@ -270,7 +297,6 @@ class Container:
         raise TimeoutError(msg)
 
     def _wait_dig(self, dns_ip, timeout=10):
-
         def check():
             out = self.bash(
                 f"dig @{dns_ip} . SOA +short +time=1 +tries=1",
@@ -340,24 +366,12 @@ class RelayContainer(Container):
 
     def ensure(self, ipv4_only=False, image_candidates=None):
         out = self.out
-
         out.green(f"Ensuring container {self.name!r} ({self.domain}) ...")
 
-        data = self.incus.run_json(["list", self.name], check=False) or []
-        existing = [c for c in data if c["name"] == self.name]
-        if existing:
-            if existing[0]["status"] != "Running":
-                self.out.print(f"  Starting container {self.name!r} ...")
-                self.start()
-            if not ipv4_only:
-                self.enable_ipv6()
-        else:
-            self.launch(image_candidates=image_candidates)
-        self.wait_ready(expect_ipv6=not ipv4_only)
+        super().ensure(ipv4_only=ipv4_only, image_candidates=image_candidates)
+
         if self.get_deploy_state():
             self.wait_services()
-        if ipv4_only:
-            self.disable_ipv6()
 
         sub = out.new_prefixed_out()
         sub.print("Configuring container hostname ...")
@@ -403,28 +417,6 @@ class RelayContainer(Container):
             self.out.print(
                 f"  Warning: Services on ports {ports} not ready after {timeout}s"
             )
-
-    def disable_ipv6(self):
-        # incus provides net.* virtualization for LXC containers so that
-        # these sysctls only affect the container's network namespace.
-        self.bash("""
-            sysctl -w net.ipv6.conf.all.disable_ipv6=1
-            sysctl -w net.ipv6.conf.default.disable_ipv6=1
-        """)
-        self.push_file_content(
-            "/etc/sysctl.d/99-disable-ipv6.conf",
-            """
-            net.ipv6.conf.all.disable_ipv6=1
-            net.ipv6.conf.default.disable_ipv6=1
-            """,
-        )
-
-    def enable_ipv6(self):
-        self.bash("""
-            rm -f /etc/sysctl.d/99-disable-ipv6.conf
-            sysctl -w net.ipv6.conf.all.disable_ipv6=0
-            sysctl -w net.ipv6.conf.default.disable_ipv6=0
-        """)
 
     def verify_ssh(self, ssh_config):
         cmd = ["ssh", "-F", str(ssh_config), "-o", "ConnectTimeout=60"]

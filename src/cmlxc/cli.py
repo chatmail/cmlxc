@@ -93,6 +93,11 @@ def init_cmd_options(parser):
         action="store_true",
         help="Destroy everything (DNS, builder, images) before re-initializing.",
     )
+    parser.add_argument(
+        "--ipv4-only",
+        action="store_true",
+        help="Setup the environment with IPv4 only (disable IPv6 in NS and builder).",
+    )
 
 
 def init_cmd(args, out):
@@ -110,14 +115,14 @@ def init_cmd(args, out):
 
         out.green("Ensuring DNS container ...")
         dns_ct = DNSContainer(ix)
-        dns_ct.ensure()
+        dns_ct.ensure(ipv4_only=args.ipv4_only)
 
         dns_ip = dns_ct.ipv4
         out.print(f"  {dns_ct.name} IP: {dns_ip}")
 
         out.green("Ensuring builder container ...")
         bld_ct = BuilderContainer(ix)
-        bld_ct.ensure()
+        bld_ct.ensure(ipv4_only=args.ipv4_only)
         bld_ct.configure_dns(dns_ip)
         bld_ct.install_deps()
         bld_ct.init_ssh()
