@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.11.0] - 2026-04-17
+
+### Features / Changes
+
+- add --ipv4-only option to init CLI, and refactor ipv6 handling.
+
 ## [0.10.0] - 2026-04-17
 
 ### Features / Changes
@@ -11,6 +17,10 @@
 
 - resolve cross-relay DNS failures and improve CI command grouping.
 - cli: support branches with slashes in --source and restore tests.
+
+### Miscellaneous Tasks
+
+- release v0.10.0.
 
 ### Other
 
@@ -221,6 +231,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.11.0]: https://github.com/chatmail/cmlxc/compare/v0.10.0..v0.11.0
 [0.10.0]: https://github.com/chatmail/cmlxc/compare/v0.9.0..v0.10.0
 [0.9.0]: https://github.com/chatmail/cmlxc/compare/v0.8.1..v0.9.0
 [0.8.1]: https://github.com/chatmail/cmlxc/compare/v0.8.0..v0.8.1
