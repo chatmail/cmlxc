@@ -24,13 +24,14 @@ URL = "https://github.com/chatmail/relay.git"
                 "remote", url="https://github.com/fork/relay.git", ref="my-branch"
             ),
         ),
+        ("hpk/new-lxc-test", SourceSpec("remote", url=URL, ref="hpk/new-lxc-test")),
     ],
 )
 def test_parse_source(value, expected):
     assert parse_source(value, URL) == expected
 
 
-@pytest.mark.parametrize("value", ["main", "some-word", "https://example.com/repo.git"])
+@pytest.mark.parametrize("value", ["main", "some-word"])
 def test_parse_source_rejects_invalid(value):
     with pytest.raises(ValueError, match="Invalid SOURCE"):
         parse_source(value, URL)

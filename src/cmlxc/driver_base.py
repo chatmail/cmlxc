@@ -54,10 +54,13 @@ def parse_source(value: str, default_url: str) -> SourceSpec:
     if value.startswith("@"):
         return SourceSpec("remote", url=default_url, ref=value[1:])
     if "://" in value:
-        url, _, ref = value.rpartition("@")
-        if not url:
-            raise ValueError(f"Invalid SOURCE: {value!r}")
-        return SourceSpec("remote", url=url, ref=ref)
+        if "@" in value:
+            url, _, ref = value.rpartition("@")
+            if url:
+                return SourceSpec("remote", url=url, ref=ref)
+        return SourceSpec("remote", url=value, ref="main")
+    if "/" in value:
+        return SourceSpec("remote", url=default_url, ref=value)
     raise ValueError(f"Invalid SOURCE: {value!r}. Use @ref, /path, ./path, or URL@ref.")
 
 
