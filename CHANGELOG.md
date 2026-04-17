@@ -1,16 +1,40 @@
 # Changelog
 
+## [0.10.0] - 2026-04-17
+
+### Features / Changes
+
+- ci: run each cmlxc command as a separate step in GitHub UI.
+- ci: split lxc-test into plan and run jobs for better UI visibility.
+
+### Fixes
+
+- resolve cross-relay DNS failures and improve CI command grouping.
+- cli: support branches with slashes in --source and restore tests.
+
+### Other
+
+- drop all previous cached images, to try to debug hanging cmdeploy/madmail tests.
+
 ## [0.9.0] - 2026-04-16
 
 ### Features / Changes
 
 - "cmlxc status" can now take one or multiple hosts.
 
-- "cmlxc test-*" now supports mixed cmdeploy/madmail testing.
+### Fixes
 
-### Refactor
+- support mixed cmdeploy/madmail testing.
+
+### Miscellaneous Tasks
+
+- release v0.9.0.
+
+### Other
 
 - wait for relay services to become ready.
+
+### Refactor
 
 - streamline wait/timeout from the various call sites.
 
@@ -197,6 +221,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.10.0]: https://github.com/chatmail/cmlxc/compare/v0.9.0..v0.10.0
 [0.9.0]: https://github.com/chatmail/cmlxc/compare/v0.8.1..v0.9.0
 [0.8.1]: https://github.com/chatmail/cmlxc/compare/v0.8.0..v0.8.1
 [0.8.0]: https://github.com/chatmail/cmlxc/compare/v0.7.5..v0.8.0

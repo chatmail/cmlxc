@@ -172,7 +172,6 @@ class MadmailDriver(Driver):
             f"{self.ct.domain}. 3600 IN MX 10 {self.ct.domain}.\n",
         )
 
-
         with self.out.section(f"madmail deploy: {self.ct.shortname} ({ip})"):
             self.out.print("Pushing madmail binary via SCP ...")
             self.ct.bash("rm -f /tmp/madmail")
