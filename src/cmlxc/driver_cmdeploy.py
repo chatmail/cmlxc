@@ -12,6 +12,36 @@ from cmlxc.driver_base import Driver
 CMDEPLOY = "cmdeploy"
 
 
+def run_cmdeploy_pytest(driver, second_domain=None):
+    """Run the cmdeploy pytest suite via incus exec on the builder.
+
+    Shared by CmdeployDriver and DockerDriver.
+    """
+    env = {}
+    if second_domain:
+        env["CHATMAIL_DOMAIN2"] = second_domain
+
+    test_addr = driver.get_test_domain_or_ip()
+    driver.out.print(f"Running cmdeploy tests against {test_addr} ...")
+
+    ini_path = f"{driver.repo_path}/chatmail.ini"
+    env_exports = f"export CHATMAIL_INI={ini_path}"
+    for k, v in env.items():
+        env_exports += f" && export {k}={v}"
+    cmd = (
+        f"incus exec {driver.bld_ct.name} --"
+        f" bash -c '"
+        f"{env_exports} &&"
+        f" source {driver.venv_path}/bin/activate &&"
+        f" cd {driver.repo_path} &&"
+        f" pytest cmdeploy/src/ -n4 -rs -x -v --durations=5'"
+    )
+    ret = driver.out.shell(cmd)
+    if ret:
+        driver.out.red(f"test-cmdeploy failed (exit {ret})")
+    return ret
+
+
 class CmdeployDriver(Driver):
     """Deploys chatmail relays via the ``cmdeploy`` tool."""
 
@@ -47,11 +77,6 @@ class CmdeployDriver(Driver):
     def configure_from_args(self, args):
         self.no_dns = bool(args.no_dns)
 
-    def on_init_relay(self, repo_path):
-        """Hook called by ``init_builder`` to run initenv.sh for the relay."""
-        self.out.print(f"  Running scripts/initenv.sh for {self.ct.shortname} ...")
-        self.bld_ct.bash(f"cd {repo_path} && bash scripts/initenv.sh")
-
     def run_deploy(self, *, source, ipv4_only=False):
         """Deploy cmdeploy to a single relay container."""
         with self.out.section(f"Preparing container setup: {self.ct.shortname}"):
@@ -77,30 +102,7 @@ class CmdeployDriver(Driver):
             write_ini(
                 self.bld_ct, self.ct, domain, disable_ipv6=self.ct.is_ipv6_disabled
             )
-
-            env = {}
-            if second_domain:
-                env["CHATMAIL_DOMAIN2"] = second_domain
-
-            test_addr = self.get_test_domain_or_ip()
-            self.out.print(f"Running cmdeploy tests against {test_addr} ...")
-
-            ini_path = f"{self.repo_path}/chatmail.ini"
-            env_exports = f"export CHATMAIL_INI={ini_path}"
-            for k, v in env.items():
-                env_exports += f" && export {k}={v}"
-            cmd = (
-                f"incus exec {self.bld_ct.name} --"
-                f" bash -c '"
-                f"{env_exports} &&"
-                f" source {self.venv_path}/bin/activate &&"
-                f" cd {self.repo_path} &&"
-                f" pytest cmdeploy/src/ -n4 -rs -x -v --durations=5'"
-            )
-            ret = self.out.shell(cmd)
-            if ret:
-                self.out.red(f"test-cmdeploy failed (exit {ret})")
-            return ret
+            return run_cmdeploy_pytest(self, second_domain)
 
     def deploy(self, source=None):
         """Deploy chatmail services to a single relay via cmdeploy."""

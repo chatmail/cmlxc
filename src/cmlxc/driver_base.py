@@ -189,7 +189,8 @@ class Driver:
 
     def on_init_relay(self, repo_path):
         """Hook called by ``init_builder`` after a relay checkout is ready."""
-        pass
+        self.out.print(f"  Running scripts/initenv.sh for {self.ct.shortname} ...")
+        self.bld_ct.bash(f"cd {repo_path} && bash scripts/initenv.sh")
 
     def get_git_main_path(self):
         """Return path to the persistent git-main checkout on the builder."""
