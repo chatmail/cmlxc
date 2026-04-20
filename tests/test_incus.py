@@ -1,5 +1,6 @@
 """Lightweight unit tests for pure logic in cmlxc.incus."""
 
+import ipaddress
 import shutil
 
 import pytest
@@ -55,6 +56,31 @@ def test_extract_ip():
     assert _extract_ip(link_only) is None
     # empty dict → None
     assert _extract_ip({}) is None
+
+
+def test_extract_ip_subnet_filter():
+    # docker0 comes first, so an unfiltered pick returns the wrong address;
+    # this is the existential reason for the subnet filter.
+    net = {
+        "docker0": {
+            "addresses": [
+                {"family": "inet", "address": "172.17.0.1", "scope": "global"},
+            ]
+        },
+        "eth0": {
+            "addresses": [
+                {"family": "inet", "address": "10.0.0.5", "scope": "global"},
+            ]
+        },
+    }
+    bridge = ipaddress.ip_network("10.0.0.0/24")
+    assert _extract_ip(net, "inet") == "172.17.0.1"
+    assert _extract_ip(net, "inet", subnet=bridge) == "10.0.0.5"
+    # nothing in the bridge subnet, other than a docker address -> None
+    only_docker = {"docker0": net["docker0"]}
+    assert _extract_ip(only_docker, "inet", subnet=bridge) is None
+    # subnet=None keeps unfiltered behaviour
+    assert _extract_ip(net, "inet", subnet=None) == "172.17.0.1"
 
 
 def test_is_ip_address():
