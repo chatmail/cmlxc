@@ -5,6 +5,7 @@ Defines the base ``Container`` handle and its subclasses
 All interaction with Incus containers goes through these types.
 """
 
+import ipaddress
 import shlex
 import socket
 import subprocess
@@ -48,12 +49,15 @@ class SetupError(Exception):
     """User-facing error raised when a pre-condition is not met."""
 
 
-def _extract_ip(net_data, family="inet"):
+def _extract_ip(net_data, family="inet", subnet=None):
     for iface_name, iface in net_data.items():
         if iface_name == "lo":
             continue
         for addr in iface.get("addresses", []):
             if addr["family"] == family and addr["scope"] == "global":
+                if subnet is not None:
+                    if ipaddress.ip_address(addr["address"]) not in subnet:
+                        continue
                 return addr["address"]
     return None
 
@@ -274,7 +278,7 @@ class Container:
             )
             if data and data[0].get("status") == "Running":
                 net = data[0].get("state", {}).get("network", {})
-                self.ipv4 = _extract_ip(net, "inet")
+                self.ipv4 = _extract_ip(net, "inet", subnet=self.incus.bridge_subnet)
                 self.ipv6 = _extract_ip(net, "inet6")
                 if self.ipv4 and (not expect_ipv6 or self.ipv6):
                     return

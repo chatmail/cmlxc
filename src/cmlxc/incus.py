@@ -81,6 +81,24 @@ class Incus:
                 check=True,
             )
         self.ssh_config_path = self.config_dir / "ssh-config"
+        self._bridge_subnet = NotImplemented
+
+    @property
+    def bridge_subnet(self):
+        """Return the IPv4 subnet of incusbr0 as an IPv4Network, or None."""
+        if self._bridge_subnet is NotImplemented:
+            self._bridge_subnet = None
+            result = self.run(
+                ["network", "get", "incusbr0", "ipv4.address"], check=False
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    self._bridge_subnet = ipaddress.ip_network(
+                        result.stdout.strip(), strict=False
+                    )
+                except ValueError:
+                    pass
+        return self._bridge_subnet
 
     def write_ssh_config(self):
         """Write ``ssh-config`` mapping all containers to their IPs."""
@@ -209,7 +227,7 @@ class Incus:
             containers.append(
                 {
                     "name": name,
-                    "ip": _extract_ip(net, "inet"),
+                    "ip": _extract_ip(net, "inet", subnet=self.bridge_subnet),
                     "ipv6": _extract_ip(net, "inet6"),
                     "domain": config.get(LABEL_DOMAIN, f"{name}{DOMAIN_SUFFIX}"),
                     "status": ct.get("status", "Unknown"),
