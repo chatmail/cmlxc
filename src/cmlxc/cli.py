@@ -41,15 +41,7 @@ def _container_completer(prefix, **kwargs):
 
 
 def _check_init(ix, out):
-    managed = ix.list_managed()
-    dns_running = any(
-        c["name"] == DNS_CONTAINER_NAME and c["status"] == "Running" for c in managed
-    )
-    if not dns_running or not ix.find_image([BASE_IMAGE_ALIAS]):
-        out.red("Error: cmlxc environment not initialized.")
-        out.red("Please run 'cmlxc init' first to set up the base image and DNS.")
-        return False
-    return True
+    return ix.check_init()
 
 
 def _destroy_all(ix, out):

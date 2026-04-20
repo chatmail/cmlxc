@@ -17,6 +17,7 @@ from xdg_base_dirs import xdg_config_home
 
 from cmlxc.container import (
     BASE_IMAGE_ALIAS,
+    DNS_CONTAINER_NAME,
     DOMAIN_SUFFIX,
     LABEL_DEPLOY_DRIVER,
     LABEL_DEPLOY_SOURCE,
@@ -99,6 +100,19 @@ class Incus:
                 except ValueError:
                     pass
         return self._bridge_subnet
+
+    def check_init(self):
+        """Return True if the cmlxc environment is initialized."""
+        managed = self.list_managed()
+        dns_running = any(
+            c["name"] == DNS_CONTAINER_NAME and c["status"] == "Running"
+            for c in managed
+        )
+        if not dns_running or not self.find_image([BASE_IMAGE_ALIAS]):
+            self.out.red("Error: cmlxc environment not initialized.")
+            self.out.red("Please run 'cmlxc init' first.")
+            return False
+        return True
 
     def write_ssh_config(self):
         """Write ``ssh-config`` mapping all containers to their IPs."""
