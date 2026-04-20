@@ -17,6 +17,7 @@ from xdg_base_dirs import xdg_config_home
 
 from cmlxc.container import (
     BASE_IMAGE_ALIAS,
+    DNS_CONTAINER_NAME,
     DOMAIN_SUFFIX,
     LABEL_DEPLOY_DRIVER,
     LABEL_DEPLOY_SOURCE,
@@ -33,6 +34,10 @@ from cmlxc.container import (
 )
 
 BASE_SETUP_NAME = "localchat-base-setup"
+
+# In subnet lookup, None means "no bridge subnet found",
+# so "not looked up yet" needs a distinct object.
+_UNSET = object()
 
 
 def _is_ip_address(s):
@@ -82,12 +87,12 @@ class Incus:
                 check=True,
             )
         self.ssh_config_path = self.config_dir / "ssh-config"
-        self._bridge_subnet = NotImplemented
+        self._bridge_subnet = _UNSET
 
     @property
     def bridge_subnet(self):
         """Return the IPv4 subnet of incusbr0, used to filter container IPs."""
-        if self._bridge_subnet is NotImplemented:
+        if self._bridge_subnet is _UNSET:
             self._bridge_subnet = None
             result = self.run(
                 ["network", "get", "incusbr0", "ipv4.address"], check=False
@@ -100,6 +105,20 @@ class Incus:
                 except ValueError:
                     pass
         return self._bridge_subnet
+
+    def check_init(self):
+        managed = self.list_managed()
+        dns_running = any(
+            c["name"] == DNS_CONTAINER_NAME and c["status"] == "Running"
+            for c in managed
+        )
+        if not dns_running or not self.find_image([BASE_IMAGE_ALIAS]):
+            self.out.red("Error: cmlxc environment not initialized.")
+            self.out.red(
+                "Please run 'cmlxc init' first to set up the base image and DNS."
+            )
+            return False
+        return True
 
     def write_ssh_config(self):
         """Write ``ssh-config`` mapping all containers to their IPs."""

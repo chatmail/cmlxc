@@ -16,8 +16,6 @@ except PackageNotFoundError:
     __version__ = "unknown"
 
 from cmlxc.container import (
-    BASE_IMAGE_ALIAS,
-    DNS_CONTAINER_NAME,
     BuilderContainer,
     DNSContainer,
     SetupError,
@@ -124,18 +122,7 @@ class Driver:
 
     def check_init(self):
         """Verify that the cmlxc environment has been initialized."""
-        managed = self.ix.list_managed()
-        dns_running = any(
-            c["name"] == DNS_CONTAINER_NAME and c["status"] == "Running"
-            for c in managed
-        )
-        if not dns_running or not self.ix.find_image([BASE_IMAGE_ALIAS]):
-            self.out.red("Error: cmlxc environment not initialized.")
-            self.out.red(
-                "Please run 'cmlxc init' first to set up the base image and DNS."
-            )
-            return False
-        return True
+        return self.ix.check_init()
 
     def get_builder(self):
         """Return the running builder container, or None.
