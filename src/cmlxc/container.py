@@ -466,6 +466,7 @@ class RelayContainer(Container):
         )
         self.bash("systemctl restart unbound || true")
         if self.bash("which dig", check=False) is None:
+            self.bash("apt-get -o DPkg::Lock::Timeout=60 update -qq")
             self.bash(
                 "DEBIAN_FRONTEND=noninteractive apt-get install -y dnsutils 2>/dev/null"
             )
