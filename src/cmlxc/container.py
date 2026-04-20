@@ -5,6 +5,7 @@ Defines the base ``Container`` handle and its subclasses
 All interaction with Incus containers goes through these types.
 """
 
+import ipaddress
 import shlex
 import socket
 import subprocess
@@ -49,12 +50,15 @@ class SetupError(Exception):
     """User-facing error raised when a pre-condition is not met."""
 
 
-def _extract_ip(net_data, family="inet"):
+def _extract_ip(net_data, family="inet", subnet=None):
     for iface_name, iface in net_data.items():
         if iface_name == "lo":
             continue
         for addr in iface.get("addresses", []):
             if addr["family"] == family and addr["scope"] == "global":
+                if subnet is not None:
+                    if ipaddress.ip_address(addr["address"]) not in subnet:
+                        continue
                 return addr["address"]
     return None
 
@@ -290,7 +294,10 @@ class Container:
             )
             if data and data[0].get("status") == "Running":
                 net = data[0].get("state", {}).get("network", {})
-                self.ipv4 = _extract_ip(net, "inet")
+                # Docker relays expose docker0 alongside eth0, so restrict the
+                # IPv4 pick to the incus bridge subnet. No v6 filter for now as
+                # Docker's v6 support is off by default.
+                self.ipv4 = _extract_ip(net, "inet", subnet=self.incus.bridge_subnet)
                 self.ipv6 = _extract_ip(net, "inet6")
                 if self.ipv4 and (not expect_ipv6 or self.ipv6):
                     return
@@ -308,7 +315,9 @@ class Container:
 
         msg = f"Container {self.name!r} did not become ready within {timeout}s"
         if not self.ipv4:
-            msg += " (No IPv4 address obtained)"
+            subnet = self.incus.bridge_subnet
+            where = f" within incus bridge subnet {subnet}" if subnet else ""
+            msg += f" (No IPv4 address obtained{where})"
         elif expect_ipv6 and not self.ipv6:
             msg += " (Has IPv4, but NO IPv6 address obtained)"
         raise TimeoutError(msg)
