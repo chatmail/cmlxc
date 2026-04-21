@@ -33,6 +33,20 @@ class CmdeployDriver(Driver):
         "fcgiwrap",
     ]
 
+    @classmethod
+    def add_cli_options(cls, parser, completer=None):
+        """Register cmdeploy-specific deploy options."""
+        super().add_cli_options(parser, completer=completer)
+        parser.add_argument(
+            "--no-dns",
+            dest="no_dns",
+            action="store_true",
+            help="Deploy the relay with only an IPv4",
+        )
+
+    def configure_from_args(self, args):
+        self.no_dns = bool(args.no_dns)
+
     def on_init_relay(self, repo_path):
         """Hook called by ``init_builder`` to run initenv.sh for the relay."""
         self.out.print(f"  Running scripts/initenv.sh for {self.ct.shortname} ...")
@@ -54,7 +68,15 @@ class CmdeployDriver(Driver):
         """Execute the cmdeploy test suite against the relay."""
         with self.out.section("cmdeploytest"):
             self.out.print("Preparing chatmail.ini on builder ...")
-            write_ini(self.bld_ct, self.ct, disable_ipv6=self.ct.is_ipv6_disabled)
+            if self.no_dns:
+                if not self.ct.ipv4:
+                    self.ct.wait_ready()
+                domain = self.ct.ipv4
+            else:
+                domain = self.ct.domain
+            write_ini(
+                self.bld_ct, self.ct, domain, disable_ipv6=self.ct.is_ipv6_disabled
+            )
 
             env = {}
             if second_domain:
@@ -88,29 +110,37 @@ class CmdeployDriver(Driver):
         self.bld_ct.write_relay_ssh_config(self.ct)
 
         dns_ct = self.configure_dns()
+        if self.no_dns:
+            if not self.ct.ipv4:
+                self.ct.wait_ready()
+            domain = self.ct.ipv4
+        else:
+            # Bootstrap minimal A record so cmdeploy can find the relay
+            domain = self.ct.domain
+            dns_ct.set_dns_records(
+                domain,
+                f"{domain}. 3600 IN A {self.ct.ipv4}",
+            )
 
-        # Bootstrap minimal A record so cmdeploy can find the relay
-        dns_ct.set_dns_records(
-            self.ct.domain,
-            f"{self.ct.domain}. 3600 IN A {self.ct.ipv4}",
-        )
-
-        with self.out.section(f"cmdeploy run: {self.ct.shortname} ({self.ct.domain})"):
+        with self.out.section(f"cmdeploy run: {self.ct.shortname} ({domain})"):
             self.out.print("Preparing chatmail.ini on builder ...")
-            write_ini(self.bld_ct, self.ct, disable_ipv6=self.ct.is_ipv6_disabled)
+            write_ini(
+                self.bld_ct, self.ct, domain, disable_ipv6=self.ct.is_ipv6_disabled
+            )
             self._run_cmdeploy("run", "--skip-dns-check")
 
             # cmdeploy appends 9.9.9.9 to resolv.conf; restore clean state
             self.out.print(f"Re-configuring DNS for {self.ct.shortname} ...")
             self.ct.configure_dns(dns_ct.ipv4)
 
-        with self.out.section(f"Loading DNS zone: {self.ct.shortname}"):
-            zone_path = f"{self.repo_path}/chatmail.zone"
-            self._run_cmdeploy("dns", "--zonefile", zone_path)
+        if not self.no_dns:
+            with self.out.section(f"Loading DNS zone: {self.ct.shortname}"):
+                zone_path = f"{self.repo_path}/chatmail.zone"
+                self._run_cmdeploy("dns", "--zonefile", zone_path)
 
-            zone_content = self.bld_ct.bash(f"cat {zone_path}")
-            self.out.print("  Loading zone content into PowerDNS ...")
-            dns_ct.set_dns_records(self.ct.domain, zone_content)
+                zone_content = self.bld_ct.bash(f"cat {zone_path}")
+                self.out.print("  Loading zone content into PowerDNS ...")
+                dns_ct.set_dns_records(self.ct.domain, zone_content)
 
         self.out.print(f"Restarting filtermail-incoming on {self.ct.shortname} ...")
         self.ct.bash("systemctl restart filtermail-incoming")
@@ -165,7 +195,7 @@ class CmdeployDriver(Driver):
 # ------------------------------------------------------------------
 
 
-def write_ini(builder_ct, ct, disable_ipv6=False):
+def write_ini(builder_ct, ct, domain, disable_ipv6=False):
     """Write a chatmail.ini for *ct* using the builder container."""
     overrides = {
         "max_user_send_per_minute": 600,
@@ -185,6 +215,6 @@ def write_ini(builder_ct, ct, disable_ipv6=False):
         python3 -c "
 from chatmaild.config import write_initial_config
 from pathlib import Path
-write_initial_config(Path('{ini_path}'), '{ct.domain}', {{{overrides_str}}})
+write_initial_config(Path('{ini_path}'), '{domain}', {{{overrides_str}}})
 "
     """)

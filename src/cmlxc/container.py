@@ -78,6 +78,7 @@ def format_ssh_config(containers, key_path):
         domain = c.get("domain", "")
         if domain and domain != c["name"]:
             hosts.append(domain)
+            hosts.append(ip)
             short = domain.split(".")[0]
             if short and short not in hosts:
                 hosts.append(short)

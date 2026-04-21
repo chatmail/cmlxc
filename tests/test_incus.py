@@ -84,7 +84,7 @@ def test_format_ssh_config():
         {"name": "ns-localchat", "ip": None, "domain": "ns.localchat"},
     ]
     text = format_ssh_config(containers, "/tmp/id_test")
-    assert "Host t0-localchat _t0.localchat _t0" in text
+    assert "Host t0-localchat _t0.localchat 10.0.0.5 _t0" in text
     assert "Hostname 10.0.0.5" in text
     assert "IdentityFile /tmp/id_test" in text
     # container without IP is skipped
