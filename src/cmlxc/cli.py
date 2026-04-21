@@ -298,10 +298,11 @@ def test_cmdeploy_cmd(args, out):
             if _is_ip_address(drv_b.get_test_domain_or_ip()):
                 continue
 
-            mx = a.bash(f"dig {b.domain} MX +short", check=False)
-            if not mx or not mx.strip():
-                out.red(f"DNS check failed: {a.name} cannot resolve MX for {b.domain}")
-                return 1
+            if not args.no_dns:
+                mx = a.bash(f"dig {b.domain} MX +short", check=False)
+                if not mx or not mx.strip():
+                    out.red(f"DNS check failed: {a.name} cannot resolve MX for {b.domain}")
+                    return 1
 
         drv_cls = DRIVER_BY_NAME.get(ct2.driver_name)
         second_domain = drv_cls(ct2, out).get_test_domain_or_ip()
