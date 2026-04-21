@@ -266,6 +266,12 @@ def _add_test_relay_args(parser):
 
 def test_cmdeploy_cmd_options(parser):
     _add_test_relay_args(parser)
+    parser.add_argument(
+        "--no-dns",
+        dest="no_dns",
+        action="store_true",
+        help="Deploy the relay with only an IPv4",
+    )
 
 
 def test_cmdeploy_cmd(args, out):
@@ -273,6 +279,7 @@ def test_cmdeploy_cmd(args, out):
     ix = Incus(out)
     ct = ix.get_running_relay(args.relay)
     driver = CmdeployDriver(ct, out)
+    driver.no_dns = bool(args.no_dns)
     if not driver.check_init():
         return 1
 
