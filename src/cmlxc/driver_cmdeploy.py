@@ -74,7 +74,9 @@ class CmdeployDriver(Driver):
                 domain = self.ct.ipv4
             else:
                 domain = self.ct.domain
-            write_ini(self.bld_ct, self.ct, domain, disable_ipv6=self.ct.is_ipv6_disabled)
+            write_ini(
+                self.bld_ct, self.ct, domain, disable_ipv6=self.ct.is_ipv6_disabled
+            )
 
             env = {}
             if second_domain:
