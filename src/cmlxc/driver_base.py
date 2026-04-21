@@ -223,6 +223,14 @@ class Driver:
             out.print(f"  Fetching {cls.REPO_NAME}-git-main from upstream ...")
             bld_ct.bash(f"cd {tmp_dest} && git fetch origin")
 
+        # Install uv for faster venv/pip operations (used by initenv.sh)
+        if bld_ct.bash("command -v uv", check=False) is None:
+            out.print("  Installing uv ...")
+            bld_ct.bash(
+                "curl -LsSf https://astral.sh/uv/install.sh"
+                " | env UV_INSTALL_DIR=/usr/local/bin sh",
+            )
+
         # Driver-specific toolchain setup
         cls.on_prep_builder(out, bld_ct, tmp_dest)
 
