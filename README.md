@@ -73,6 +73,34 @@ Each `deploy-*` invocation initialises the driver's source in the
 builder (wipe-and-reclone).
 
 
+**Deploy via Docker Compose** (runs chatmail inside Docker-in-LXC):
+
+    # Pull a pre-built image directly from GHCR
+    cmlxc docker deploy --source ghcr:main dk0
+    cmlxc docker deploy --source ghcr:sha-ce05b26 dk0
+
+    # Load a local image tarball
+    cmlxc docker deploy --image ./chatmail.tar dk0
+
+    # Inject a locally-built image from the host Docker daemon
+    cmlxc docker deploy --source docker:chatmail-relay:latest dk0
+
+Pull a newer image into an already-deployed relay:
+
+    cmlxc docker pull dk0
+    cmlxc docker pull dk0 --tag sha-ce05b26
+
+Inspect running services and logs:
+
+    cmlxc docker ps dk0
+    cmlxc docker logs dk0
+    cmlxc docker logs dk0 -f
+
+SSH into a Docker service (auto-configured by ``cmlxc``):
+
+    ssh chatmail@dk0.localchat
+
+
 **Run integration tests** inside the builder:
 
     cmlxc test-mini cm0
@@ -159,13 +187,14 @@ the host only needs `cmlxc` itself.
 
 **Relay containers** (e.g. `cm0-localchat`, `mad1-localchat`) --
 ephemeral containers that receive a deployed chatmail service.
-Each relay is locked to a single deployment driver (`cmdeploy` or
-`madmail`); switching requires destroying and re-creating the container.
+Each relay is locked to a single deployment driver (`cmdeploy`,
+`madmail`, or `docker`); switching requires destroying and re-creating
+the container.
 
 
 ### Deployment drivers
 
-Drivers live in `driver_cmdeploy.py` and `driver_madmail.py`.
+Drivers live in `driver_cmdeploy.py`, `driver_madmail.py`, and `driver_docker.py`.
 Each driver module exports its CLI subcommand metadata,
 builder init, and deploy orchestration.
 `cli.py` generates the `deploy-*` subcommands from a `DRIVER_BY_NAME` mapping.
@@ -178,6 +207,51 @@ builder init, and deploy orchestration.
 - **madmail** -- builds the `maddy` Go binary inside the builder,
   pushes it via SCP and runs `madmail install --simple --ip <IP>`.
   No DNS entries are needed.
+
+- **docker** -- deploys chatmail via Docker Compose inside a Docker-in-LXC
+relay container (`security.nesting=true`), either directly pulled from GHCR or
+injected from a host docker instance. Docker is installed inside the relay
+automatically; no host Docker installation is required.
+
+#### Docker subcommands
+
+- `docker deploy RELAY` -- deploy chatmail into a relay container via
+  Docker Compose.  Three image sources are supported:
+  - `--source ghcr:TAG` -- pull a pre-built image from GHCR directly
+    into the relay.  No builder container is involved.
+  - `--source docker:TAG` -- pipe a locally-built image from the host
+    Docker daemon into the relay via `docker save | docker load`.
+  - `--image PATH` -- load a pre-exported image tarball.
+  A docker-compose.yaml is fetched from
+  [chatmail/docker](https://github.com/chatmail/docker) unless
+  `--compose URL` overrides the source.
+
+- `docker pull RELAY` -- pull a newer image from GHCR into an already
+  deployed relay without a full redeploy.  Use `--tag` to specify the
+  image tag (default: `main`).
+
+- `docker ps RELAY` -- list running Docker Compose services in a relay.
+
+- `docker logs RELAY` -- show Docker Compose logs (last 100 lines).
+  Pass `-f` to follow in real time.
+
+- `docker shell RELAY [SERVICE]` -- open an interactive shell inside
+  the named Compose service (default: `chatmail`).
+
+#### SSH forwarding during tests
+
+`test-cmdeploy` runs against Docker relays over SSH, but the cmdeploy suite
+expects to land on the machine running the services.  On a Docker relay, SSH
+lands on the LXC host while the services live in the container, so
+`test-cmdeploy` installs an `authorized_keys` forced command on the relay
+that forwards every session into the `chatmail` Compose service:
+
+    ssh root@dk0.localchat        # runs inside the chatmail container
+
+This is set up only by `test-cmdeploy`, not by `deploy` or `status`, and it
+replaces direct SSH access to the LXC host.  That host is managed via
+`incus exec` anyway, so nothing is lost.  Other Compose services are not
+reachable this way; use `cmlxc docker shell RELAY SERVICE` for those.
 
 
 ## Releasing
