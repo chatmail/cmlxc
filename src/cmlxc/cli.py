@@ -1,7 +1,7 @@
 """cmlxc -- Manage local chatmail relay containers via Incus.
 
 Standard workflow:
-init -> deploy-cmdeploy/deploy-madmail -> test-cmdeploy/test-madmail/test-mini.
+init -> deploy-cmdeploy/deploy-madmail/docker deploy -> test-*/test-mini.
 """
 
 import argparse
@@ -22,6 +22,7 @@ from cmlxc.container import (
 )
 from cmlxc.driver_base import __version__
 from cmlxc.driver_cmdeploy import CmdeployDriver
+from cmlxc.driver_docker import DockerDriver
 from cmlxc.driver_madmail import MadmailDriver, print_admin_info
 from cmlxc.incus import Incus, _is_ip_address, check_cgroup_compat
 from cmlxc.output import Out
@@ -259,6 +260,11 @@ def _add_test_relay_args(parser):
 
 def test_cmdeploy_cmd_options(parser):
     _add_test_relay_args(parser)
+    parser.add_argument(
+        "--relay-ref",
+        default=None,
+        help="Override relay git ref for tests (default: SHA from deployed image label).",
+    )
 
 
 def test_cmdeploy_cmd(args, out):
@@ -302,6 +308,8 @@ def test_cmdeploy_cmd(args, out):
         drv2 = DRIVER_BY_NAME[ct2.driver_name](ct2, out)
         second_domain = drv2.get_test_domain_or_ip()
 
+    if args.relay_ref is not None:
+        driver.relay_ref = args.relay_ref
     return driver.run_tests(second_domain=second_domain)
 
 
@@ -527,11 +535,16 @@ def _print_container_status(out, c, ix):
 
 def _print_builder_repos(out, ct):
     try:
-        for name in DRIVER_BY_NAME:
-            path = f"/root/{name}-git-main"
+        seen = set()
+        for name, drv_cls in DRIVER_BY_NAME.items():
+            repo = drv_cls.REPO_NAME
+            if repo in seen:
+                continue
+            seen.add(repo)
+            path = f"/root/{repo}-git-main"
             status = ct.get_repo_status(path)
             if status:
-                out.print(f"{name}: {status}")
+                out.print(f"{repo}: {status}")
     except Exception:
         out.print("repos: (unavailable)")
 
@@ -612,7 +625,11 @@ SUBCOMMANDS = [
     ("destroy", destroy_cmd, destroy_cmd_options),
 ]
 
-DRIVER_BY_NAME = {"cmdeploy": CmdeployDriver, "madmail": MadmailDriver}
+DRIVER_BY_NAME = {
+    "cmdeploy": CmdeployDriver,
+    "docker": DockerDriver,
+    "madmail": MadmailDriver,
+}
 
 
 def _add_subcommand(subparsers, name, func, addopts, shared):

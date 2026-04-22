@@ -112,6 +112,10 @@ class Driver:
     REQUIRED_SOURCE_PATHS: list[str] = []
     DEFAULT_REF: str = "main"
     type: str = "dns"
+    # False for drivers whose --source names a prebuilt artifact rather than
+    # a git ref (DockerDriver) and get source=None in run_deploy and does no
+    # deploy-time checkout; configure_from_args parses --source.
+    SOURCE_IS_GIT_REF: bool = True
 
     def __init__(self, ct, out):
         self.ct = ct
@@ -150,13 +154,27 @@ class Driver:
     # ------------------------------------------------------------------
 
     @classmethod
+    def source_arg_kwargs(cls):
+        """Return argparse kwargs for ``--source``.
+
+        Override in drivers that accept a different set of source forms, so
+        that ``--help`` advertises what the driver actually implements.
+        """
+        return {
+            "default": f"@{cls.DEFAULT_REF}",
+            "help": (
+                "Driver source: @ref, /path, ./path, or URL@ref"
+                f" (default: @{cls.DEFAULT_REF})."
+            ),
+        }
+
+    @classmethod
     def add_cli_options(cls, parser, completer=None):
         """Register ``deploy-*`` CLI options on *parser*."""
         parser.add_argument(
             "--source",
-            default=f"@{cls.DEFAULT_REF}",
             metavar="SOURCE",
-            help=f"Driver source: @ref, /path, ./path, or URL@ref (default: @{cls.DEFAULT_REF}).",
+            **cls.source_arg_kwargs(),
         )
         action = parser.add_argument(
             "name",
@@ -305,7 +323,7 @@ class Driver:
         tag = source.ref if source.kind == "remote" else None
         self.on_init_relay(repo_path, tag)
 
-    def run_deploy(self, *, source, ipv4_only):
+    def run_deploy(self, *, source, ipv4_only=False):
         """Perform the driver-specific deployment.
 
         Subclasses must implement.
@@ -347,16 +365,19 @@ class Driver:
             if not driver.get_builder():
                 return 1
 
-            source = parse_source(args.source, cls.DEFAULT_SOURCE_URL)
-            if not driver.check_local_source(source):
-                return 1
+            source = None
+            if cls.SOURCE_IS_GIT_REF:
+                source = parse_source(args.source, cls.DEFAULT_SOURCE_URL)
+                if not driver.check_local_source(source):
+                    return 1
 
             driver.configure_from_args(args)
 
             out.print(f"cmlxc {__version__}")
-            with out.section(f"Preparing {cls.CLI_NAME} source in builder"):
-                out.print(f"  Source: {source.description}")
-                driver.init_builder(source=source)
+            if source is not None:
+                with out.section(f"Preparing {cls.CLI_NAME} source in builder"):
+                    out.print(f"  Source: {source.description}")
+                    driver.init_builder(source=source)
 
             driver.run_deploy(
                 source=source,
