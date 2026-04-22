@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from cmlxc.driver_base import SourceSpec, parse_source, validate_relay_name
+from cmlxc.driver_base import SourceSpec, is_sha, parse_source, validate_relay_name
 from cmlxc.driver_cmdeploy import get_ini_overrides
 from cmlxc.driver_madmail import release_asset_url
 
@@ -55,6 +55,24 @@ def test_parse_source_rejects_unsafe_ref(value):
     # refs reach `git checkout` inside `bash -ec` on the builder
     with pytest.raises(ValueError, match="Invalid ref"):
         parse_source(value, URL)
+
+
+@pytest.mark.parametrize(
+    "ref, expected",
+    [
+        ("a" * 40, True),
+        ("0123456789abcdef0123456789abcdef01234567", True),
+        ("A" * 40, False),  # git object names are lowercase hex
+        ("a" * 39, False),
+        ("a" * 41, False),
+        ("main", False),
+        ("v1.2.3", False),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_is_sha(ref, expected):
+    assert is_sha(ref) is expected
 
 
 @pytest.mark.parametrize("bad", [".", "..", "../relay", "/path", "a/b", "a.b"])
