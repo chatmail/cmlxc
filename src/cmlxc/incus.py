@@ -121,6 +121,19 @@ class Incus:
         self.ssh_config_path.write_text(text)
         return self.ssh_config_path
 
+    def _get_docker_services(self, name):
+        """Query running Docker Compose service names from a container."""
+        raw = self.run_output(
+            ["exec", name, "--",
+             "docker", "compose",
+             "-f", "/opt/chatmail-docker/docker-compose.yaml",
+             "ps", "--services", "--status", "running"],
+            check=False,
+        )
+        if not raw:
+            return []
+        return [s.strip() for s in raw.splitlines() if s.strip()]
+
     def check_ssh_include(self):
         """Check if ~/.ssh/config includes our ssh-config."""
         user_ssh_config = Path.home() / ".ssh" / "config"
