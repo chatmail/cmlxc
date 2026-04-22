@@ -245,7 +245,15 @@ class Driver:
                 f"  Copying {self.REPO_NAME}-git-main to {repo_path} on builder"
             )
             self.bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
-            if source.ref != "main":
+            is_sha = bool(re.fullmatch(r"[0-9a-f]{40}", source.ref or ""))
+            if is_sha:
+                # Shallow clone won't have arbitrary commits; fetch just this one.
+                self.out.print(f"  Fetching {source.ref[:12]} ...")
+                self.bld_ct.bash(
+                    f"cd {repo_path} && "
+                    f"git fetch --depth 1 origin {source.ref}"
+                )
+            elif source.ref != "main":
                 self.out.print(f"  Checking out {source.ref!r} ...")
             self.bld_ct.bash(f"""
                 cd {repo_path}
