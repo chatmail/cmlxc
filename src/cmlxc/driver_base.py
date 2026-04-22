@@ -77,6 +77,14 @@ def latest_release_tag(tag_output):
     return None
 
 
+_SHA_RE = re.compile(r"[0-9a-f]{40}")
+
+
+def is_sha(ref):
+    """Return True if ref is a full 40-char git SHA"""
+    return bool(_SHA_RE.fullmatch(ref or ""))
+
+
 _RELAY_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
 
 
@@ -258,8 +266,20 @@ class Driver:
                 if not source.ref:
                     raise SetupError(f"No release tag found for {self.REPO_NAME}")
                 self.out.print(f"  Resolved @latest to {source.ref}")
-            if source.ref != "main":
+            ref_is_sha = is_sha(source.ref)
+            if ref_is_sha:
+                # Shallow clone won't have arbitrary commits; fetch just this one.
+                self.out.print(f"  Fetching {source.ref[:12]} ...")
+                self.bld_ct.bash(
+                    f"cd {repo_path} && git fetch --depth 1 origin {source.ref}"
+                )
+            elif source.ref != "main":
                 self.out.print(f"  Checking out {source.ref!r} ...")
+            reset_cmd = ""
+            if not ref_is_sha:
+                reset_cmd = (
+                    f"git reset --hard -q origin/{source.ref} 2>/dev/null || true"
+                )
             self.bld_ct.bash(f"""
                 cd {repo_path}
                 git checkout -q {source.ref}
