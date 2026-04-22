@@ -5,6 +5,7 @@ init -> deploy-cmdeploy/deploy-madmail -> test-cmdeploy/test-madmail/test-mini.
 """
 
 import argparse
+import os
 import subprocess
 from pathlib import Path
 
@@ -670,6 +671,10 @@ def main(args=None):
     args = parser.parse_args(args=args)
     if args.func is None:
         return parser.parse_args(["-h"])
+
+    # GitHub Actions: auto-enable max verbosity when debug logging is on
+    if not args.verbose and os.environ.get("RUNNER_DEBUG") == "1":
+        args.verbose = 3
 
     out = Out(verbosity=args.verbose)
     try:
