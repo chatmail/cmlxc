@@ -2,7 +2,7 @@ import ssl
 
 import pytest
 from deltachat_rpc_client import Rpc
-from support import ChatmailACFactory, CMSetup, get_gencreds
+from support import ChatmailACFactory, CMSetup, RelayAdmin, get_gencreds
 
 
 def pytest_addoption(parser):
@@ -41,6 +41,20 @@ def maildomain2(pytestconfig):
     if not domain:
         pytest.skip("set relay2 to run two-relay tests")
     return domain
+
+
+@pytest.fixture
+def relayadmin(maildomain):
+    admin = RelayAdmin(maildomain)
+    yield admin
+    admin.cleanup()
+
+
+@pytest.fixture
+def relayadmin2(maildomain2):
+    admin = RelayAdmin(maildomain2)
+    yield admin
+    admin.cleanup()
 
 
 @pytest.fixture(scope="session")
