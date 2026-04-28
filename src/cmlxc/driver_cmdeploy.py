@@ -10,6 +10,11 @@ from cmlxc.container import SetupError
 from cmlxc.driver_base import Driver
 
 CMDEPLOY = "cmdeploy"
+TEST_INI_OVERRIDES = {
+    "max_user_send_per_minute": 600,
+    "max_user_send_burst_size": 100,
+    "mtail_address": "127.0.0.1",
+}
 
 
 def run_cmdeploy_pytest(driver, second_domain=None):
@@ -199,11 +204,7 @@ class CmdeployDriver(Driver):
 
 def write_ini(builder_ct, ct, domain, disable_ipv6=False):
     """Write a chatmail.ini for *ct* using the builder container."""
-    overrides = {
-        "max_user_send_per_minute": 600,
-        "max_user_send_burst_size": 100,
-        "mtail_address": "127.0.0.1",
-    }
+    overrides = dict(TEST_INI_OVERRIDES)
     if disable_ipv6:
         overrides["disable_ipv6"] = "True"
     overrides_str = ", ".join(
