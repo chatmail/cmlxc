@@ -1094,4 +1094,4 @@ OVERRIDE
 
             self.out.print("Preparing chatmail.ini on builder ...")
             write_ini(self.bld_ct, self.ct, self.ct.domain, disable_ipv6=self.ct.is_ipv6_disabled)
-            return run_cmdeploy_pytest(self, second_domain)
+            return run_test_cmdeploy(self, second_domain)

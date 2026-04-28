@@ -17,7 +17,7 @@ TEST_INI_OVERRIDES = {
 }
 
 
-def run_cmdeploy_pytest(driver, second_domain=None):
+def run_test_cmdeploy(driver, second_domain=None):
     """Run the cmdeploy pytest suite via incus exec on the builder.
 
     Shared by CmdeployDriver and DockerDriver.
@@ -107,7 +107,7 @@ class CmdeployDriver(Driver):
             write_ini(
                 self.bld_ct, self.ct, domain, disable_ipv6=self.ct.is_ipv6_disabled
             )
-            return run_cmdeploy_pytest(self, second_domain)
+            return run_test_cmdeploy(self, second_domain)
 
     def deploy(self, source=None):
         """Deploy chatmail services to a single relay via cmdeploy."""
