@@ -38,7 +38,7 @@ jobs:
         run: |
           i=1
           while IFS= read -r line || [ -n "$line" ]; do
-            trimmed=$(echo "$line" | xargs)
+            trimmed=$(echo "$line" | xargs -0)
             [[ -z "$trimmed" || "$trimmed" == "#"* ]] && continue
             echo "cmd${i}=${trimmed}" >> "$GITHUB_OUTPUT"
             i=$((i+1))
