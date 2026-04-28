@@ -255,10 +255,13 @@ class Driver:
                 )
             elif source.ref != "main":
                 self.out.print(f"  Checking out {source.ref!r} ...")
+            reset_cmd = ""
+            if not is_sha:
+                reset_cmd = f"git reset --hard -q origin/{source.ref} 2>/dev/null || true"
             self.bld_ct.bash(f"""
                 cd {repo_path}
                 git checkout -q {source.ref}
-                git reset --hard -q origin/{source.ref} 2>/dev/null || true
+                {reset_cmd}
                 git clean -fdx
                 if [ -f .gitmodules ]; then
                     git submodule update --init --recursive
