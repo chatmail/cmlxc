@@ -282,7 +282,7 @@ class Driver:
             self.bld_ct.bash(f"""
                 cd {repo_path}
                 git checkout -q {source.ref}
-                git reset --hard -q origin/{source.ref} 2>/dev/null || true
+                {reset_cmd}
                 git clean -fdx
                 if [ -f .gitmodules ]; then
                     git submodule update --init --recursive
