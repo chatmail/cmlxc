@@ -38,9 +38,8 @@ jobs:
         run: |
           i=1
           while IFS= read -r line || [ -n "$line" ]; do
-            trimmed=$(echo "$line" | xargs)
-            [[ -z "$trimmed" || "$trimmed" == "#"* ]] && continue
-            echo "cmd${i}=${trimmed}" >> "$GITHUB_OUTPUT"
+            [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
+            echo "cmd${i}=${line}" >> "$GITHUB_OUTPUT"
             i=$((i+1))
           done <<'EOF'
           ${{ inputs.cmlxc_commands }}
@@ -166,13 +165,12 @@ jobs:
           set -eu
           i=0
           while IFS= read -r cmd || [ -n "$cmd" ]; do
-            trimmed=$(echo "$cmd" | xargs)
-            [[ -z "$trimmed" || "$trimmed" == "#"* ]] && continue
+            [[ "$cmd" =~ ^[[:space:]]*(#|$) ]] && continue
             i=$((i+1))
             if [ $i -le 12 ]; then continue; fi
 
-            echo "::group::Run: $trimmed"
-            eval "$trimmed" || { echo "::endgroup::"; exit 1; }
+            echo "::group::Run: $cmd"
+            eval "$cmd" || { echo "::endgroup::"; exit 1; }
             echo "::endgroup::"
           done <<< "$CMLXC_COMMANDS"
 
