@@ -266,11 +266,6 @@ def test_cmdeploy_cmd_options(parser):
         action="store_true",
         help="Deploy the relay with only an IPv4",
     )
-    parser.add_argument(
-        "--relay-ref",
-        default=None,
-        help="Relay git ref to use for test code (default: read from image label).",
-    )
 
 
 def test_cmdeploy_cmd(args, out):
@@ -307,10 +302,7 @@ def test_cmdeploy_cmd(args, out):
         drv_cls = DRIVER_BY_NAME.get(ct2.driver_name)
         second_domain = drv_cls(ct2, out).get_test_domain_or_ip()
 
-    return driver.run_tests(
-        second_domain=second_domain,
-        relay_ref=args.relay_ref,
-    )
+    return driver.run_tests(second_domain=second_domain)
 
 
 # -------------------------------------------------------------------

@@ -1057,20 +1057,23 @@ OVERRIDE
         )
         return sha.strip() if sha and sha.strip() else None
 
-    def run_tests(self, second_domain=None, relay_ref=None):
+    def run_tests(self, second_domain=None):
         """Execute the cmdeploy test suite against the Docker relay.
 
         The builder checkout must match the relay image so that
         ``test_deployed_state`` (which compares local ``git rev-parse HEAD``
         against ``/etc/chatmail-version``) passes.  When the venv already
         exists from a prior deploy, re-checkout if the current SHA differs
-        from *relay_ref* (or the SHA baked into the running image).
+        from the image SHA.
+
+        Set ``RELAY_REF`` in the environment to override the relay git ref
+        used for the test checkout (default: SHA from the running image).
         """
         with self.out.section("cmdeploytest"):
             self._setup_docker_ssh_forwarding()
             self.bld_ct.write_relay_ssh_config(self.ct)
 
-            ref = relay_ref or self._get_image_relay_sha() or "main"
+            ref = os.environ.get("RELAY_REF") or self._get_image_relay_sha() or "main"
             venv_exists = self.bld_ct.bash(
                 f"test -d {self.venv_path}", check=False,
             ) is not None
