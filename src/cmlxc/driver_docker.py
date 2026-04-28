@@ -1062,13 +1062,24 @@ OVERRIDE
             self._setup_docker_ssh_forwarding()
             self.bld_ct.write_relay_ssh_config(self.ct)
 
-            if self.bld_ct.bash(f"test -d {self.venv_path}", check=False) is None:
+            ref = relay_ref or self._get_image_relay_sha() or "main"
+            venv_exists = self.bld_ct.bash(
+                f"test -d {self.venv_path}", check=False,
+            ) is not None
+            if not venv_exists:
                 self.out.print(
                     f"  Venv missing, initializing builder for {self.ct.shortname} ..."
                 )
-                ref = relay_ref or self._get_image_relay_sha() or "main"
                 source = parse_source(f"@{ref}", self.DEFAULT_SOURCE_URL)
                 self.init_builder(source)
+            else:
+                current_sha = get_relay_sha(self.bld_ct, self.repo_path)
+                if current_sha != ref and not ref.startswith(current_sha):
+                    self.out.print(
+                        f"  Updating builder checkout to {ref} ..."
+                    )
+                    source = parse_source(f"@{ref}", self.DEFAULT_SOURCE_URL)
+                    self.init_builder(source)
 
             self.out.print("Preparing chatmail.ini on builder ...")
             write_ini(self.bld_ct, self.ct, self.ct.domain, disable_ipv6=self.ct.is_ipv6_disabled)
