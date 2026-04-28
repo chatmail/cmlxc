@@ -47,8 +47,10 @@ def image_tag(sha):
 def ensure_docker(ct):
     """Install Docker engine in container if not present.
 
-    Enables security.nesting (required for Docker-in-LXC)
-    and restarts the container if needed.
+    Sets security.nesting (required for Docker-in-LXC) unconditionally
+    because this is also called from standalone subcommands (docker build,
+    docker pull) where the container may not have been launched with
+    DockerDriver.NESTING_CONFIG.
     """
     if ct.bash("docker info >/dev/null 2>&1", check=False) is not None:
         return
@@ -207,19 +209,24 @@ def pull_image(ct, tag, out):
         out.red(f"  Failed to pull {ref}")
         return None
     ct.bash(f"docker tag {ref} {DOCKER_IMAGE_TAG}:latest")
-    sha = ct.bash(
-        f"docker inspect {ref}"
-        " --format '{{index .Config.Labels \"org.opencontainers.image.revision\"}}'",
-        check=False,
-    )
-    if sha and sha.strip():
-        sha = sha.strip()
+    sha = get_image_label_sha(ct, ref)
+    if sha:
         local_tag = image_tag(sha)
         ct.bash(f"docker tag {ref} {local_tag}")
         out.print(f"  Tagged as {local_tag}")
         return sha
     out.print(f"  Pulled {ref} (no SHA label found)")
     return None
+
+
+def get_image_label_sha(ct, tag):
+    """Read the relay commit SHA from a Docker image's OCI labels."""
+    sha = ct.bash(
+        f"docker inspect {tag}"
+        " --format '{{index .Config.Labels \"org.opencontainers.image.revision\"}}'",
+        check=False,
+    )
+    return sha.strip() if sha and sha.strip() else None
 
 
 def auto_prune_images(bld_ct, out, keep=3):
@@ -244,12 +251,17 @@ def auto_prune_images(bld_ct, out, keep=3):
         bld_ct.bash(f"docker rmi {DOCKER_IMAGE_TAG}:{tag}", check=False)
 
 
+def _print_indented(out, text):
+    """Print each line of *text* with two-space indent."""
+    for line in text.strip().splitlines():
+        out.print(f"  {line}")
+
+
 def show_docker_df(bld_ct, out):
     """Display docker disk usage summary from builder."""
     raw = bld_ct.bash("docker system df", check=False)
     if raw:
-        for line in raw.strip().splitlines():
-            out.print(f"  {line}")
+        _print_indented(out, raw)
 
 
 def prune_relay_containers(ix, level, out):
@@ -494,7 +506,6 @@ def ps_docker_cmd(args, out):
 def shell_docker_cmd_options(parser, completer=None):
     relay_arg = parser.add_argument(
         "relay",
-        metavar="RELAY",
         help="Relay container name (e.g. dock0).",
     )
     if completer:
@@ -503,7 +514,6 @@ def shell_docker_cmd_options(parser, completer=None):
         "service",
         nargs="?",
         default=DOCKER_COMPOSE_SERVICE,
-        metavar="SERVICE",
         help=f"Docker Compose service (default: {DOCKER_COMPOSE_SERVICE}).",
     )
     parser.add_argument(
@@ -574,17 +584,13 @@ def pull_docker_cmd(args, out):
 
 
 def prune_docker_cmd_options(parser):
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--deep",
-        action="store_true",
-        help="Also prune dangling build cache, unused volumes, and relay containers.",
-    )
-    group.add_argument(
-        "--all",
-        dest="prune_all",
-        action="store_true",
-        help="Remove ALL unused images, build cache, volumes, and relay resources.",
+    parser.add_argument(
+        "level",
+        nargs="?",
+        default="default",
+        choices=["default", "deep", "all"],
+        help="Prune level: default (old images), deep (+cache/volumes/relays),"
+        " all (everything). Default: default.",
     )
     parser.add_argument(
         "--dry-run",
@@ -609,12 +615,7 @@ def prune_docker_cmd(args, out):
     if args.dry_run:
         return 0
 
-    if args.prune_all:
-        level = "all"
-    elif args.deep:
-        level = "deep"
-    else:
-        level = "default"
+    level = args.level
 
     images = list_images(bld_ct)
     if images:
@@ -1054,12 +1055,7 @@ OVERRIDE
 
     def _get_image_relay_sha(self):
         """Read the relay commit SHA from the running Docker image's OCI labels."""
-        sha = self.ct.bash(
-            f"docker inspect {DOCKER_IMAGE_TAG}:latest"
-            " --format '{{index .Config.Labels \"org.opencontainers.image.revision\"}}'",
-            check=False,
-        )
-        return sha.strip() if sha and sha.strip() else None
+        return get_image_label_sha(self.ct, f"{DOCKER_IMAGE_TAG}:latest")
 
     def run_tests(self, second_domain=None):
         """Execute the cmdeploy test suite against the Docker relay.
