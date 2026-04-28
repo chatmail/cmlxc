@@ -28,7 +28,7 @@ jobs:
         sudo curl -fsSL https://pkgs.zabbly.com/key.asc -o /etc/apt/keyrings/zabbly.asc
         echo "deb [signed-by=/etc/apt/keyrings/zabbly.asc] https://pkgs.zabbly.com/incus/stable $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/zabbly-incus.list
         sudo apt-get update
-        sudo apt-get install -y incus
+        sudo apt-get install -y incus-base
 
     - name: Initialise Incus
       run: |

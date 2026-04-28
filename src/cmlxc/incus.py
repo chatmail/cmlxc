@@ -17,6 +17,7 @@ from xdg_base_dirs import xdg_config_home
 
 from cmlxc.container import (
     BASE_IMAGE_ALIAS,
+    DNS_CONTAINER_NAME,
     DOMAIN_SUFFIX,
     LABEL_DEPLOY_DRIVER,
     LABEL_DEPLOY_SOURCE,
@@ -81,6 +82,37 @@ class Incus:
                 check=True,
             )
         self.ssh_config_path = self.config_dir / "ssh-config"
+        self._bridge_subnet = NotImplemented
+
+    @property
+    def bridge_subnet(self):
+        """Return the IPv4 subnet of incusbr0 as an IPv4Network, or None."""
+        if self._bridge_subnet is NotImplemented:
+            self._bridge_subnet = None
+            result = self.run(
+                ["network", "get", "incusbr0", "ipv4.address"], check=False
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    self._bridge_subnet = ipaddress.ip_network(
+                        result.stdout.strip(), strict=False
+                    )
+                except ValueError:
+                    pass
+        return self._bridge_subnet
+
+    def check_init(self):
+        """Return True if the cmlxc environment is initialized."""
+        managed = self.list_managed()
+        dns_running = any(
+            c["name"] == DNS_CONTAINER_NAME and c["status"] == "Running"
+            for c in managed
+        )
+        if not dns_running or not self.find_image([BASE_IMAGE_ALIAS]):
+            self.out.red("Error: cmlxc environment not initialized.")
+            self.out.red("Please run 'cmlxc init' first.")
+            return False
+        return True
 
     def write_ssh_config(self):
         """Write ``ssh-config`` mapping all containers to their IPs."""
@@ -88,6 +120,19 @@ class Incus:
         text = format_ssh_config(containers, self.ssh_key_path)
         self.ssh_config_path.write_text(text)
         return self.ssh_config_path
+
+    def _get_docker_services(self, name):
+        """Query running Docker Compose service names from a container."""
+        raw = self.run_output(
+            ["exec", name, "--",
+             "docker", "compose",
+             "-f", "/opt/chatmail-docker/docker-compose.yaml",
+             "ps", "--services", "--status", "running"],
+            check=False,
+        )
+        if not raw:
+            return []
+        return [s.strip() for s in raw.splitlines() if s.strip()]
 
     def check_ssh_include(self):
         """Check if ~/.ssh/config includes our ssh-config."""
@@ -209,7 +254,7 @@ class Incus:
             containers.append(
                 {
                     "name": name,
-                    "ip": _extract_ip(net, "inet"),
+                    "ip": _extract_ip(net, "inet", subnet=self.bridge_subnet),
                     "ipv6": _extract_ip(net, "inet6"),
                     "domain": config.get(LABEL_DOMAIN, f"{name}{DOMAIN_SUFFIX}"),
                     "status": ct.get("status", "Unknown"),

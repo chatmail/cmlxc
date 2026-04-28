@@ -5,6 +5,7 @@ Defines the base ``Container`` handle and its subclasses
 All interaction with Incus containers goes through these types.
 """
 
+import ipaddress
 import shlex
 import socket
 import subprocess
@@ -48,12 +49,15 @@ class SetupError(Exception):
     """User-facing error raised when a pre-condition is not met."""
 
 
-def _extract_ip(net_data, family="inet"):
+def _extract_ip(net_data, family="inet", subnet=None):
     for iface_name, iface in net_data.items():
         if iface_name == "lo":
             continue
         for addr in iface.get("addresses", []):
             if addr["family"] == family and addr["scope"] == "global":
+                if subnet is not None:
+                    if ipaddress.ip_address(addr["address"]) not in subnet:
+                        continue
                 return addr["address"]
     return None
 
@@ -131,7 +135,7 @@ class Container:
             cmd.append("--force")
         self.incus.run(cmd, check=False)
 
-    def launch(self, image_candidates=None):
+    def launch(self, image_candidates=None, extra_config=None):
         """Launch from the base image or a provided candidate."""
         if image_candidates is None:
             image_candidates = [BASE_IMAGE_ALIAS]
@@ -146,6 +150,9 @@ class Container:
         cfg = []
         cfg += ("-c", f"{LABEL_KEY}=true")
         cfg += ("-c", f"{LABEL_DOMAIN}={self.domain}")
+        if extra_config:
+            for k, v in extra_config.items():
+                cfg += ("-c", f"{k}={v}")
         self.incus.run(["launch", image, self.name, *cfg])
         return image
 
@@ -163,7 +170,7 @@ class Container:
         )
         return result == "1"
 
-    def ensure(self, ipv4_only=False, image_candidates=None):
+    def ensure(self, ipv4_only=False, image_candidates=None, extra_config=None):
         data = self.incus.run_json(["list", self.name], check=False) or []
 
         existing = [c for c in data if c["name"] == self.name]
@@ -173,7 +180,7 @@ class Container:
             if not ipv4_only:
                 self.enable_ipv6()
         else:
-            self.launch(image_candidates=image_candidates)
+            self.launch(image_candidates=image_candidates, extra_config=extra_config)
         self.wait_ready(expect_ipv6=not ipv4_only)
         if ipv4_only:
             self.disable_ipv6()
@@ -274,7 +281,7 @@ class Container:
             )
             if data and data[0].get("status") == "Running":
                 net = data[0].get("state", {}).get("network", {})
-                self.ipv4 = _extract_ip(net, "inet")
+                self.ipv4 = _extract_ip(net, "inet", subnet=self.incus.bridge_subnet)
                 self.ipv6 = _extract_ip(net, "inet6")
                 if self.ipv4 and (not expect_ipv6 or self.ipv6):
                     return
@@ -350,8 +357,10 @@ class RelayContainer(Container):
                 )
         super().destroy()
 
-    def launch(self, image_candidates=None):
-        image = super().launch(image_candidates=image_candidates)
+    def launch(self, image_candidates=None, extra_config=None):
+        image = super().launch(
+            image_candidates=image_candidates, extra_config=extra_config
+        )
         # Re-inject the current SSH key; cached images may have a stale one.
         pub_key = self.incus.ssh_key_path.with_suffix(".pub").read_text().strip()
         self.bash(f"""
@@ -365,12 +374,15 @@ class RelayContainer(Container):
         """)
         return image
 
-    def ensure(self, ipv4_only=False, image_candidates=None):
+    def ensure(self, ipv4_only=False, image_candidates=None, extra_config=None):
         out = self.out
         out.green(f"Ensuring container {self.name!r} ({self.domain}) ...")
 
-        super().ensure(ipv4_only=ipv4_only, image_candidates=image_candidates)
-
+        super().ensure(
+            ipv4_only=ipv4_only,
+            image_candidates=image_candidates,
+            extra_config=extra_config,
+        )
         if self.get_deploy_state():
             self.wait_services()
 
@@ -454,6 +466,7 @@ class RelayContainer(Container):
         )
         self.bash("systemctl restart unbound || true")
         if self.bash("which dig", check=False) is None:
+            self.bash("apt-get -o DPkg::Lock::Timeout=60 update -qq")
             self.bash(
                 "DEBIAN_FRONTEND=noninteractive apt-get install -y dnsutils 2>/dev/null"
             )

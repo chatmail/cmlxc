@@ -189,7 +189,8 @@ class Driver:
 
     def on_init_relay(self, repo_path):
         """Hook called by ``init_builder`` after a relay checkout is ready."""
-        pass
+        self.out.print(f"  Running scripts/initenv.sh for {self.ct.shortname} ...")
+        self.bld_ct.bash(f"cd {repo_path} && bash scripts/initenv.sh")
 
     def get_git_main_path(self):
         """Return path to the persistent git-main checkout on the builder."""
@@ -222,6 +223,14 @@ class Driver:
             out.print(f"  Fetching {cls.REPO_NAME}-git-main from upstream ...")
             bld_ct.bash(f"cd {tmp_dest} && git fetch origin")
 
+        # Install uv for faster venv/pip operations (used by initenv.sh)
+        if bld_ct.bash("command -v uv", check=False) is None:
+            out.print("  Installing uv ...")
+            bld_ct.bash(
+                "curl -LsSf https://astral.sh/uv/install.sh"
+                " | env UV_INSTALL_DIR=/usr/local/bin sh",
+            )
+
         # Driver-specific toolchain setup
         cls.on_prep_builder(out, bld_ct, tmp_dest)
 
@@ -236,12 +245,23 @@ class Driver:
                 f"  Copying {self.REPO_NAME}-git-main to {repo_path} on builder"
             )
             self.bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
-            if source.ref != "main":
+            is_sha = bool(re.fullmatch(r"[0-9a-f]{40}", source.ref or ""))
+            if is_sha:
+                # Shallow clone won't have arbitrary commits; fetch just this one.
+                self.out.print(f"  Fetching {source.ref[:12]} ...")
+                self.bld_ct.bash(
+                    f"cd {repo_path} && "
+                    f"git fetch --depth 1 origin {source.ref}"
+                )
+            elif source.ref != "main":
                 self.out.print(f"  Checking out {source.ref!r} ...")
+            reset_cmd = ""
+            if not is_sha:
+                reset_cmd = f"git reset --hard -q origin/{source.ref} 2>/dev/null || true"
             self.bld_ct.bash(f"""
                 cd {repo_path}
                 git checkout -q {source.ref}
-                git reset --hard -q origin/{source.ref} 2>/dev/null || true
+                {reset_cmd}
                 git clean -fdx
                 if [ -f .gitmodules ]; then
                     git submodule update --init --recursive

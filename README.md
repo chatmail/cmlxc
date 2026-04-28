@@ -81,6 +81,31 @@ Each `deploy-*` invocation initialises the driver's source in the
 builder (wipe-and-reclone).
 
 
+**Deploy via Docker Compose** (builds and runs chatmail inside Docker-in-LXC):
+
+    cmlxc docker deploy --source @main dk0
+    cmlxc docker deploy --source ../relay dk0
+    cmlxc docker deploy --image ./chatmail.tar.zst dk1
+
+Pre-build images or manage the image cache in the builder:
+
+    cmlxc docker build --source @main
+    cmlxc docker build --source @main --output ./chatmail.tar.zst
+    cmlxc docker list
+    cmlxc docker prune
+    cmlxc docker prune --all
+
+Inspect running services and logs:
+
+    cmlxc docker ps dk0
+    cmlxc docker logs dk0
+    cmlxc docker logs dk0 -f
+
+SSH into a Docker service (auto-configured by ``cmlxc``):
+
+    ssh chatmail@dk0.localchat
+
+
 **Run integration tests** inside the builder:
 
     cmlxc test-mini cm0
@@ -167,13 +192,14 @@ the host only needs `cmlxc` itself.
 
 **Relay containers** (e.g. `cm0-localchat`, `mad1-localchat`) --
 ephemeral containers that receive a deployed chatmail service.
-Each relay is locked to a single deployment driver (`cmdeploy` or
-`madmail`); switching requires destroying and re-creating the container.
+Each relay is locked to a single deployment driver (`cmdeploy`,
+`madmail`, or `docker`); switching requires destroying and re-creating
+the container.
 
 
 ### Deployment drivers
 
-Drivers live in `driver_cmdeploy.py` and `driver_madmail.py`.
+Drivers live in `driver_cmdeploy.py`, `driver_madmail.py`, and `driver_docker.py`.
 Each driver module exports its CLI subcommand metadata,
 builder init, and deploy orchestration.
 `cli.py` generates the `deploy-*` subcommands from a `DRIVER_BY_NAME` mapping.
@@ -188,6 +214,56 @@ builder init, and deploy orchestration.
 - **madmail** -- builds the `maddy` Go binary inside the builder,
   pushes it via SCP and runs `madmail install --simple --ip <IP>`.
   No DNS entries are needed.
+
+- **docker** -- builds a Docker image in the builder container,
+  transfers it to the relay, and starts it with `docker compose`.
+  The relay container is launched with `security.nesting=true` to
+  allow Docker-in-LXC.  DNS zones are extracted from the running
+  container and loaded into PowerDNS.
+  Use `--image` to skip the build and load a pre-exported tarball.
+  Docker is installed inside the containers automatically; no Docker
+  installation is needed on the host.  The Dockerfile and compose
+  files are cloned from
+  [chatmail/docker](https://github.com/chatmail/docker) into the
+  relay checkout automatically.
+  If `zstd` is installed on the host, `--output` produces compressed
+  tarballs and `--image` decompresses them; otherwise plain tar is used.
+
+#### Docker image management
+
+`docker build`, `docker list`, and `docker prune` operate on the
+builder's Docker image cache independently of any relay deployment.
+
+- `docker build` -- builds the chatmail Docker image from a relay source
+  and caches it in the builder.  Use `--output PATH` to export a tarball (zstd-compressed if
+  available).  Old images are
+  auto-pruned (configurable with `--keep N`, default 3).
+  Images are cached by relay git SHA.  If only the `docker/` files
+  changed (Dockerfile, compose, init scripts) without a new relay
+  commit, pass `--force-rebuild` to bypass the cache.
+
+- `docker list` -- shows cached images with tag, ref, SHA, and build date.
+
+- `docker prune` -- removes stale images and dangling Docker resources.
+  Three levels: default (containers + dangling images), `--deep`
+  (adds build cache + volumes), `--all` (everything unused).
+  Use `--dry-run` to preview disk usage without pruning.
+
+- `docker ps RELAY` -- lists running Docker Compose services in a relay.
+
+- `docker logs RELAY` -- shows Docker Compose logs from a deployed relay
+  container (last 100 lines).  Pass `-f` to follow output in real time.
+
+#### SSH into Docker services
+
+For Docker-deployed relays, `cmlxc` auto-generates SSH config entries for
+each running Compose service.  After any deploy or `cmlxc status`, you can:
+
+    ssh chatmail@dk0.localchat
+
+This uses `ProxyCommand` to run `docker exec` inside the LXC container.
+As the compose setup evolves to multiple services, each service gets its
+own entry (e.g. `ssh dovecot@dk0.localchat`).
 
 
 ## Releasing
