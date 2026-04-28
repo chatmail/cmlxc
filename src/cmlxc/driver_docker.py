@@ -883,6 +883,7 @@ class DockerDriver(Driver):
             cd /opt/chatmail-docker
             cat > .env <<'DOTENV'
 MAIL_DOMAIN={self.ct.domain}
+CHATMAIL_IMAGE=chatmail-relay:latest
 DOTENV
         """)
         # `cgroup: host` works on bare-metal Docker but not inside LXC --
@@ -1057,7 +1058,14 @@ OVERRIDE
         return sha.strip() if sha and sha.strip() else None
 
     def run_tests(self, second_domain=None, relay_ref=None):
-        """Execute the cmdeploy test suite against the Docker relay."""
+        """Execute the cmdeploy test suite against the Docker relay.
+
+        The builder checkout must match the relay image so that
+        ``test_deployed_state`` (which compares local ``git rev-parse HEAD``
+        against ``/etc/chatmail-version``) passes.  When the venv already
+        exists from a prior deploy, re-checkout if the current SHA differs
+        from *relay_ref* (or the SHA baked into the running image).
+        """
         with self.out.section("cmdeploytest"):
             self._setup_docker_ssh_forwarding()
             self.bld_ct.write_relay_ssh_config(self.ct)
