@@ -15,7 +15,12 @@ from pathlib import Path
 
 from cmlxc.container import BuilderContainer, SetupError
 from cmlxc.driver_base import Driver, __version__, parse_source, validate_relay_name
-from cmlxc.driver_cmdeploy import CmdeployDriver, run_cmdeploy_pytest, write_ini
+from cmlxc.driver_cmdeploy import (
+    TEST_INI_OVERRIDES,
+    CmdeployDriver,
+    run_test_cmdeploy,
+    write_ini,
+)
 from cmlxc.incus import Incus
 
 DOCKER = "docker"
@@ -965,16 +970,15 @@ OVERRIDE
             self.out.red(f"  --- {label} ---")
             output = self.ct.bash(cmd, check=False)
             if output:
-                for line in output.strip().splitlines():
-                    self.out.print(f"  {line}")
+                _print_indented(self.out, output)
 
     def _patch_container_ini(self):
         """Apply test rate-limit overrides inside the Docker container.
 
-        Patches both the source ini and the deployed copy that filtermail reads.
+        Uses TEST_INI_OVERRIDES (shared with write_ini) to patch both the
+        source ini and the deployed copy that filtermail reads.
         """
         svc = DOCKER_COMPOSE_SERVICE
-        overrides = {"max_user_send_per_minute": 600, "max_user_send_burst_size": 100}
         ini_paths = [
             "/etc/chatmail/chatmail.ini",
             "/usr/local/lib/chatmaild/chatmail.ini",
@@ -982,7 +986,7 @@ OVERRIDE
         sed_cmds = " && ".join(
             f"sed -i 's/^{k} = .*/{k} = {v}/' {path}"
             for path in ini_paths
-            for k, v in overrides.items()
+            for k, v in TEST_INI_OVERRIDES.items()
         )
         self.ct.bash(
             f"docker exec {svc} bash -c \"{sed_cmds}\""
