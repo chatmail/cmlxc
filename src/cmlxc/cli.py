@@ -301,7 +301,9 @@ def test_cmdeploy_cmd(args, out):
             if not args.no_dns:
                 mx = a.bash(f"dig {b.domain} MX +short", check=False)
                 if not mx or not mx.strip():
-                    out.red(f"DNS check failed: {a.name} cannot resolve MX for {b.domain}")
+                    out.red(
+                        f"DNS check failed: {a.name} cannot resolve MX for {b.domain}"
+                    )
                     return 1
 
         drv_cls = DRIVER_BY_NAME.get(ct2.driver_name)
