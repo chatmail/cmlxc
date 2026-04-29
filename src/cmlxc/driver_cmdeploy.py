@@ -5,6 +5,7 @@ container -- no host-side Python imports are needed.
 """
 
 import time
+from pathlib import Path
 
 from cmlxc.container import SetupError
 from cmlxc.driver_base import Driver
@@ -33,6 +34,8 @@ class CmdeployDriver(Driver):
         "fcgiwrap",
     ]
 
+    filtermail_bin = None
+
     @classmethod
     def add_cli_options(cls, parser, completer=None):
         """Register cmdeploy-specific deploy options."""
@@ -43,14 +46,35 @@ class CmdeployDriver(Driver):
             action="store_true",
             help="Deploy the relay with only an IPv4",
         )
+        parser.add_argument(
+            "--filtermail",
+            metavar="PATH",
+            type=Path,
+            help="Path to a local filtermail binary to use for deployment.",
+        )
 
     def configure_from_args(self, args):
         self.no_dns = bool(args.no_dns)
+        self.filtermail_bin = args.filtermail
 
     def on_init_relay(self, repo_path):
         """Hook called by ``init_builder`` to run initenv.sh for the relay."""
         self.out.print(f"  Running scripts/initenv.sh for {self.ct.shortname} ...")
         self.bld_ct.bash(f"cd {repo_path} && bash scripts/initenv.sh")
+
+    def init_builder(self, source):
+        super().init_builder(source)
+        if self.filtermail_bin:
+            local_path = self.filtermail_bin.resolve()
+            if not local_path.is_file():
+                raise SetupError(f"filtermail path {local_path} is not a file.")
+
+            remote_path = f"{self.repo_path}/filtermail"
+            self.out.print(f"  Syncing {local_path.name} to builder ...")
+            self.ix.run(
+                ["file", "push", str(local_path), f"{self.bld_ct.name}{remote_path}"]
+            )
+            self.custom_env["CHATMAIL_FILTERMAIL_BINARY"] = remote_path
 
     def run_deploy(self, *, source, ipv4_only=False):
         """Deploy cmdeploy to a single relay container."""
@@ -78,21 +102,18 @@ class CmdeployDriver(Driver):
                 self.bld_ct, self.ct, domain, disable_ipv6=self.ct.is_ipv6_disabled
             )
 
-            env = {}
+            ini_path = f"{self.repo_path}/chatmail.ini"
+            env = {"CHATMAIL_INI": ini_path}
             if second_domain:
                 env["CHATMAIL_DOMAIN2"] = second_domain
 
             test_addr = self.get_test_domain_or_ip()
             self.out.print(f"Running cmdeploy tests against {test_addr} ...")
 
-            ini_path = f"{self.repo_path}/chatmail.ini"
-            env_exports = f"export CHATMAIL_INI={ini_path}"
-            for k, v in env.items():
-                env_exports += f" && export {k}={v}"
+            env_args = "".join(f" --env {k}={v}" for k, v in env.items())
             cmd = (
-                f"incus exec {self.bld_ct.name} --"
+                f"incus exec {self.bld_ct.name}{env_args} --"
                 f" bash -c '"
-                f"{env_exports} &&"
                 f" source {self.venv_path}/bin/activate &&"
                 f" cd {self.repo_path} &&"
                 f" pytest cmdeploy/src/ -n4 -rs -x -v --durations=5'"
@@ -158,8 +179,9 @@ class CmdeployDriver(Driver):
         extra_str = " ".join(extra)
         v_flag = " -" + "v" * self.out.verbosity if self.out.verbosity > 0 else ""
         ini_path = f"{self.repo_path}/chatmail.ini"
+        env_args = "".join(f" --env {k}={v}" for k, v in self.custom_env.items())
         cmd = (
-            f"incus exec {self.bld_ct.name} --"
+            f"incus exec {self.bld_ct.name}{env_args} --"
             f" bash -c '"
             f"source {self.venv_path}/bin/activate &&"
             f" cd {self.repo_path} &&"
@@ -167,6 +189,7 @@ class CmdeployDriver(Driver):
             f" --config {ini_path}"
             f" {extra_str}'"
         )
+
         ret = self.out.shell(cmd)
         if ret:
             raise SetupError(

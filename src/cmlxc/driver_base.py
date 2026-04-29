@@ -97,6 +97,7 @@ class Driver:
         self.out = out
         self.repo_path = f"/root/relays/{self.REPO_NAME}-{ct.shortname}"
         self.venv_path = f"{self.repo_path}/venv"
+        self.custom_env = {}
 
     # ------------------------------------------------------------------
     # Pre-flight checks (shared by all drivers)
