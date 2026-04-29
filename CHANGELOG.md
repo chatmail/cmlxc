@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.13.0] - 2026-04-29
+
+### Features / Changes
+
+- new "cmlxc deploy-cmdeploy --filtermail" option to transfer and use a custom filtermail binary.
+
 ## [0.12.0] - 2026-04-29
 
 ### Features / Changes
@@ -10,7 +16,12 @@
 ### Fixes
 
 - cmdeploy: MX check can't work for no-dns.
-- don't break quoting or callers of lxc-test reusable workflow.
+- doin't break quoting or callers of lxc-test reusable workflow.
+- fix formatting.
+
+### Miscellaneous Tasks
+
+- release v0.12.0.
 
 ## [0.11.0] - 2026-04-17
 
@@ -247,6 +258,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.13.0]: https://github.com/chatmail/cmlxc/compare/v0.12.0..v0.13.0
 [0.12.0]: https://github.com/chatmail/cmlxc/compare/v0.11.0..v0.12.0
 [0.11.0]: https://github.com/chatmail/cmlxc/compare/v0.10.0..v0.11.0
 [0.10.0]: https://github.com/chatmail/cmlxc/compare/v0.9.0..v0.10.0
