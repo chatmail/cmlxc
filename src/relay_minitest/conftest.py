@@ -1,3 +1,4 @@
+import ipaddress
 import ssl
 
 import pytest
@@ -15,14 +16,13 @@ def pytest_addoption(parser):
 
 
 def get_ssl_context(maildomain):
-    if (
-        maildomain.startswith("_")
-        or maildomain.startswith("10.")
-        or maildomain.startswith("172.")
-        or maildomain.startswith("192.168.")
-        or maildomain == "localhost"
-        or maildomain == "127.0.0.1"
-    ):
+    try:
+        ipaddress.ip_address(maildomain)
+        is_ip = True
+    except ValueError:
+        is_ip = False
+
+    if maildomain.startswith("_") or maildomain == "localhost" or is_ip:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
