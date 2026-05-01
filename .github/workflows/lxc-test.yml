@@ -61,6 +61,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: chatmail/cmlxc
+          ref: j-g00da/smtp-and-http-tests
           path: cmlxc
 
       - name: Install Incus (Zabbly)
