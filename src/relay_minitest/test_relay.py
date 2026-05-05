@@ -79,6 +79,7 @@ class TestMultiRelay:
         lines = relayadmin.wait_for_journal_match("deferred|delivery attempt failed")
         lp.indent(lines.splitlines()[-1])
 
+    @pytest.mark.skip(reason="mxdeliv currently disabled on chatmail/relay")
     def test_one_on_one_http_only(
         self, cmfactory, cmfactory2, relayadmin2, lp
     ):
