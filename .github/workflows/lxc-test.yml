@@ -13,6 +13,11 @@ on:
           The caller repository is checked out into ./repo.
         required: true
         type: string
+      cmlxc_version:
+        description: "Git ref to checkout for cmlxc (tag, branch, or SHA)."
+        required: false
+        default: main
+        type: string
 
 jobs:
   plan:
@@ -61,7 +66,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: chatmail/cmlxc
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ inputs.cmlxc_version }}
           path: cmlxc
           fetch-depth: 0
 
