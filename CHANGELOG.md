@@ -1,8 +1,18 @@
 # Changelog
 
+## [0.13.5] - 2026-05-07
+
+- experiemntal: allow callers of reusable work flow to set cmlxc version, defaulting to main.
+
 ## [0.13.4] - 2026-05-07
 
-- prevent powerdns recursor from trying internal DNS resolution.
+### Fixes
+
+- prevent recursor from trying internal DNS resolution.
+
+### Miscellaneous Tasks
+
+- release v0.13.4.
 
 ## [0.13.3] - 2026-05-07
 
@@ -300,6 +310,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.13.5]: https://github.com/chatmail/cmlxc/compare/v0.13.4..v0.13.5
 [0.13.4]: https://github.com/chatmail/cmlxc/compare/v0.13.3..v0.13.4
 [0.13.3]: https://github.com/chatmail/cmlxc/compare/v0.13.2..v0.13.3
 [0.13.2]: https://github.com/chatmail/cmlxc/compare/v0.13.1..v0.13.2
