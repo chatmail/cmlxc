@@ -1,8 +1,15 @@
 # Changelog
 
+## [0.13.4] - 2026-05-07
+
+- prevent powerdns recursor from trying internal DNS resolution.
+
 ## [0.13.3] - 2026-05-07
 
-- streamline make release script.
+### Miscellaneous Tasks
+
+- streamline release script.
+- release v0.13.3.
 
 ## [0.13.2] - 2026-05-07
 
@@ -293,6 +300,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.13.4]: https://github.com/chatmail/cmlxc/compare/v0.13.3..v0.13.4
 [0.13.3]: https://github.com/chatmail/cmlxc/compare/v0.13.2..v0.13.3
 [0.13.2]: https://github.com/chatmail/cmlxc/compare/v0.13.1..v0.13.2
 [0.13.1]: https://github.com/chatmail/cmlxc/compare/v0.13.0..v0.13.1
