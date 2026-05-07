@@ -1,12 +1,19 @@
 # Changelog
 
+## [0.13.3] - 2026-05-07
+
+- streamline make release script.
+
 ## [0.13.2] - 2026-05-07
 
 ### Fixes
 
 - fix cmlxc version display in workflows that call the reusable lxc-test workflow.
 
+### Miscellaneous Tasks
+
 - improve release script to provide full guidance until git push.
+- release v0.13.2.
 
 ## [0.13.1] - 2026-05-07
 
@@ -286,6 +293,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.13.3]: https://github.com/chatmail/cmlxc/compare/v0.13.2..v0.13.3
 [0.13.2]: https://github.com/chatmail/cmlxc/compare/v0.13.1..v0.13.2
 [0.13.1]: https://github.com/chatmail/cmlxc/compare/v0.13.0..v0.13.1
 [0.13.0]: https://github.com/chatmail/cmlxc/compare/v0.12.0..v0.13.0
