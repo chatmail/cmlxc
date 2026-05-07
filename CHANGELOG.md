@@ -1,10 +1,22 @@
 # Changelog
 
+## [0.13.1] - 2026-05-07
+
+### Features / Changes
+
+- Add one-on-one http-only and smtp-only tests.
+
+- flush recursor cache after zone load, and fix formatting.
+
 ## [0.13.0] - 2026-04-29
 
 ### Features / Changes
 
 - new "cmlxc deploy-cmdeploy --filtermail" option to transfer and use a custom filtermail binary.
+
+### Miscellaneous Tasks
+
+- release v0.13.0.
 
 ## [0.12.0] - 2026-04-29
 
@@ -258,6 +270,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.13.1]: https://github.com/chatmail/cmlxc/compare/v0.13.0..v0.13.1
 [0.13.0]: https://github.com/chatmail/cmlxc/compare/v0.12.0..v0.13.0
 [0.12.0]: https://github.com/chatmail/cmlxc/compare/v0.11.0..v0.12.0
 [0.11.0]: https://github.com/chatmail/cmlxc/compare/v0.10.0..v0.11.0
