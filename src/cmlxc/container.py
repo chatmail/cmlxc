@@ -703,7 +703,7 @@ class DNSContainer(Container):
             """
             local-address=0.0.0.0
             local-port=53
-            forward-zones=localchat=127.0.0.1:5353
+            forward-zones-recurse=localchat=127.0.0.1:5353
             allow-from=0.0.0.0/0
             dont-query=
             dnssec=off
