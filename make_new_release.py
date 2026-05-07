@@ -15,8 +15,17 @@ def run(cmd, capture=False):
     return subprocess.run(cmd).returncode
 
 
+def ask(prompt):
+    """Prompt the user for yes/no confirmation."""
+    try:
+        return input(prompt).strip().lower() == "y"
+    except KeyboardInterrupt:
+        print("\nAborted.")
+        sys.exit(0)
+
+
 def get_current_version():
-    """Get the latest version tag from git."""
+    """Gets the latest version tag from git."""
     try:
         tag = run(["git", "describe", "--tags", "--abbrev=0"], capture=True)
         return tag.lstrip("v.")
@@ -25,14 +34,14 @@ def get_current_version():
 
 
 def get_bumped_version():
-    """Get the suggested next version from git-cliff."""
+    """Gets the suggested next version from git-cliff."""
     try:
         bumped = run(["git", "cliff", "--bumped-version"], capture=True)
         ver = bumped.lstrip("v")
         # Enforce 0.X.Y space if git-cliff suggests 1.0.0+
         if ver.startswith("1."):
             current = get_current_version()
-            major, minor, micro = map(int, current.split("."))
+            _major, minor, _micro = map(int, current.split("."))
             return f"0.{minor + 1}.0"
         return ver
     except subprocess.CalledProcessError:
@@ -40,12 +49,12 @@ def get_bumped_version():
 
 
 def bump_version(current, part):
-    """Calculate the next version according to 0.X.Y rules."""
+    """Calculates the next version according to 0.X.Y rules."""
     parts = list(map(int, current.split(".")))
     while len(parts) < 3:
         parts.append(0)
 
-    major, minor, micro = parts
+    _major, minor, micro = parts
     if part == "minor":
         minor += 1
         micro = 0
@@ -56,32 +65,40 @@ def bump_version(current, part):
 
 
 def main():
-    # 1. Check if we are on main branch
+    # 1. Must be on main
     branch = run(["git", "branch", "--show-current"], capture=True)
     if branch != "main":
         print(f"Error: Not on branch 'main' (currently on {branch!r}).")
         sys.exit(1)
 
-    # 2. Check for uncommitted changes
+    # 2. Working copy must be clean
     if run(["git", "diff", "--quiet"]) != 0:
         print("Error: Uncommitted changes in the repository.")
         print("Please commit or stash them before releasing.")
         sys.exit(1)
 
-    # 3. Check if in sync with origin/main
-    print("--- Checking sync with origin/main ---")
-    run(["git", "fetch", "origin"])
-    try:
-        remote_head = run(["git", "rev-parse", "origin/main"], capture=True)
-        local_head = run(["git", "rev-parse", "HEAD"], capture=True)
-        if remote_head != local_head:
-            print("Error: Local branch 'main' is not in sync with 'origin/main'.")
-            print("Please pull/push before releasing.")
-            sys.exit(1)
-    except subprocess.CalledProcessError:
-        print("Warning: Could not find origin/main, skipping sync check.")
+    if run(["git", "diff", "--cached", "--quiet"]) != 0:
+        print("Error: Staged but uncommitted changes in the repository.")
+        print("Please commit or stash them before releasing.")
+        sys.exit(1)
 
-    print("--- Running tests with tox ---")
+    # 3. Lint first — fast feedback before anything else
+    print("--- Running lint checks ---")
+    if run(["tox", "-e", "lint"]) != 0:
+        print("Error: Lint checks failed. Fix issues before releasing.")
+        sys.exit(1)
+
+    # 4. Push current main so CI picks it up
+    if not ask("\nPush current main to origin? [y/N]: "):
+        print("Aborted — main must be pushed before running full tests.")
+        sys.exit(0)
+
+    if run(["git", "push", "origin", "main"]) != 0:
+        print("Error: git push failed.")
+        sys.exit(1)
+
+    # 5. Full test suite
+    print("\n--- Running tests with tox ---")
     if run(["tox"]) != 0:
         print("Error: Tox tests failed. Aborting release.")
         sys.exit(1)
@@ -91,10 +108,10 @@ def main():
         print("Error: Functional tests (fullrun.py) failed. Aborting release.")
         sys.exit(1)
 
+    # 6. Version selection
     current = get_current_version()
-    print(f"Current version: v{current}")
+    print(f"\nCurrent version: v{current}")
 
-    # Auto-suggestion from git-cliff
     auto_next = get_bumped_version()
     minor_next = bump_version(current, "minor")
     micro_next = bump_version(current, "micro")
@@ -128,47 +145,51 @@ def main():
 
     tag = f"v{next_ver}"
 
+    # 7. Preview and confirm
     print(f"\n--- Previewing unreleased changes for {tag} ---")
     run(["git", "cliff", "--unreleased"])
 
-    try:
-        confirm = input(f"\nProceed with release {tag}? [y/N]: ").lower()
-    except KeyboardInterrupt:
-        print("\nAborted.")
-        sys.exit(0)
-
-    if confirm != "y":
+    if not ask(f"\nProceed with release {tag}? [y/N]: "):
         print("Cancelled.")
         return
 
-    # 2. Generate changelog
+    # 8. Generate changelog
     print(f"Generating CHANGELOG.md for {tag} ...")
     if run(["git", "cliff", "--tag", tag, "-o", "CHANGELOG.md"]) != 0:
         print("Error: Failed to generate changelog.")
         sys.exit(1)
 
-    # 3. Allow manual edits to CHANGELOG.md
+    # 9. Allow manual edits to CHANGELOG.md
     editor = os.environ.get("EDITOR", os.environ.get("VISUAL", "vi"))
     print(f"Opening CHANGELOG.md in {editor} for manual edits...")
     if run([editor, "CHANGELOG.md"]) != 0:
         print("Warning: Editor exited with error, continuing anyway.")
 
-    # 4. Create release commit
+    # 10. Create release commit and tag
     print(f"Creating release commit for {tag} ...")
     run(["git", "add", "CHANGELOG.md"])
     if run(["git", "commit", "-m", f"chore: release {tag}"]) != 0:
         print("Error: Failed to create release commit.")
         sys.exit(1)
 
-    # 5. Tag the release commit
     print(f"Tagging {tag} ...")
     if run(["git", "tag", "-af", tag, "-m", f"Release {tag}"]) != 0:
         print("Error: Failed to create tag.")
         sys.exit(1)
 
-    print(f"\nSuccessfully released {tag}.")
-    print("\nNext steps:")
-    print(f"  git push origin main {tag}")
+    # 11. Final push with tag
+    push_cmd = f"git push origin main {tag}"
+    if not ask(f"\nPush release? Will run: {push_cmd}\n[y/N]: "):
+        print(f"\nRelease {tag} created locally but NOT pushed.")
+        print(f"When ready, run:\n  {push_cmd}")
+        return
+
+    if run(["git", "push", "origin", "main", tag]) != 0:
+        print("Error: Push failed. Release commit and tag exist locally.")
+        print(f"Retry manually:\n  {push_cmd}")
+        sys.exit(1)
+
+    print(f"\nSuccessfully released and pushed {tag}.")
 
 
 if __name__ == "__main__":
