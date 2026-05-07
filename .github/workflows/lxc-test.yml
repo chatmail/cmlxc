@@ -61,7 +61,9 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: chatmail/cmlxc
+          ref: ${{ github.workflow_sha }}
           path: cmlxc
+          fetch-depth: 0
 
       - name: Install Incus (Zabbly)
         run: |
