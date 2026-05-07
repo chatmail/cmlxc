@@ -65,13 +65,13 @@ def bump_version(current, part):
 
 
 def main():
-    # 1. Must be on main
+    # Must be on main
     branch = run(["git", "branch", "--show-current"], capture=True)
     if branch != "main":
         print(f"Error: Not on branch 'main' (currently on {branch!r}).")
         sys.exit(1)
 
-    # 2. Working copy must be clean
+    # Working copy must be clean
     if run(["git", "diff", "--quiet"]) != 0:
         print("Error: Uncommitted changes in the repository.")
         print("Please commit or stash them before releasing.")
@@ -82,22 +82,13 @@ def main():
         print("Please commit or stash them before releasing.")
         sys.exit(1)
 
-    # 3. Lint first — fast feedback before anything else
+    # Lint first — fast feedback before anything else
     print("--- Running lint checks ---")
     if run(["tox", "-e", "lint"]) != 0:
         print("Error: Lint checks failed. Fix issues before releasing.")
         sys.exit(1)
 
-    # 4. Push current main so CI picks it up
-    if not ask("\nPush current main to origin? [y/N]: "):
-        print("Aborted — main must be pushed before running full tests.")
-        sys.exit(0)
-
-    if run(["git", "push", "origin", "main"]) != 0:
-        print("Error: git push failed.")
-        sys.exit(1)
-
-    # 5. Full test suite
+    # Full test suite
     print("\n--- Running tests with tox ---")
     if run(["tox"]) != 0:
         print("Error: Tox tests failed. Aborting release.")
@@ -108,7 +99,7 @@ def main():
         print("Error: Functional tests (fullrun.py) failed. Aborting release.")
         sys.exit(1)
 
-    # 6. Version selection
+    # Version selection
     current = get_current_version()
     print(f"\nCurrent version: v{current}")
 
@@ -145,7 +136,7 @@ def main():
 
     tag = f"v{next_ver}"
 
-    # 7. Preview and confirm
+    # Preview and confirm
     print(f"\n--- Previewing unreleased changes for {tag} ---")
     run(["git", "cliff", "--unreleased"])
 
@@ -153,19 +144,19 @@ def main():
         print("Cancelled.")
         return
 
-    # 8. Generate changelog
+    # Generate changelog
     print(f"Generating CHANGELOG.md for {tag} ...")
     if run(["git", "cliff", "--tag", tag, "-o", "CHANGELOG.md"]) != 0:
         print("Error: Failed to generate changelog.")
         sys.exit(1)
 
-    # 9. Allow manual edits to CHANGELOG.md
+    # Allow manual edits to CHANGELOG.md
     editor = os.environ.get("EDITOR", os.environ.get("VISUAL", "vi"))
     print(f"Opening CHANGELOG.md in {editor} for manual edits...")
     if run([editor, "CHANGELOG.md"]) != 0:
         print("Warning: Editor exited with error, continuing anyway.")
 
-    # 10. Create release commit and tag
+    # Create release commit and tag
     print(f"Creating release commit for {tag} ...")
     run(["git", "add", "CHANGELOG.md"])
     if run(["git", "commit", "-m", f"chore: release {tag}"]) != 0:
@@ -177,7 +168,7 @@ def main():
         print("Error: Failed to create tag.")
         sys.exit(1)
 
-    # 11. Final push with tag
+    # Final push with tag
     push_cmd = f"git push origin main {tag}"
     if not ask(f"\nPush release? Will run: {push_cmd}\n[y/N]: "):
         print(f"\nRelease {tag} created locally but NOT pushed.")
