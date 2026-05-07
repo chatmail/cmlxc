@@ -79,9 +79,7 @@ class TestMultiRelay:
         lines = relayadmin.wait_for_journal_match("deferred|delivery attempt failed")
         lp.indent(lines.splitlines()[-1])
 
-    def test_one_on_one_http_only(
-        self, cmfactory, cmfactory2, relayadmin2, lp
-    ):
+    def test_one_on_one_http_only(self, cmfactory, cmfactory2, relayadmin2, lp):
         ac1 = cmfactory.get_online_account()
         ac2 = cmfactory2.get_online_account()
         chat = cmfactory.get_accepted_chat(ac1, ac2)
@@ -92,9 +90,7 @@ class TestMultiRelay:
         msg2 = ac2.wait_for_incoming_msg()
         assert msg2.get_snapshot().text == "should still arrive over https"
 
-    def test_one_on_one_smtp_only(
-        self, cmfactory, cmfactory2, relayadmin2, lp
-    ):
+    def test_one_on_one_smtp_only(self, cmfactory, cmfactory2, relayadmin2, lp):
         ac1 = cmfactory.get_online_account()
         ac2 = cmfactory2.get_online_account()
         chat = cmfactory.get_accepted_chat(ac1, ac2)

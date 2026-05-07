@@ -608,12 +608,12 @@ class BuilderContainer(Container):
         self.bash("""
             # Remove all ephemeral relay checkouts
             rm -rf /root/relays/*
-            
+
             # Remove all package manager caches
             rm -rf /root/.cache/*
             rm -rf /root/.npm
             rm -rf /root/.bun
-            
+
             # Clean up apt specifically just in case
             apt-get clean
             rm -rf /var/lib/apt/lists/*
@@ -636,6 +636,9 @@ class DNSContainer(Container):
             systemctl restart pdns-recursor
         """)
         self._wait_dig("127.0.0.1", timeout=60)
+        # flush recursor cache to clear stale NXDOMAIN entries
+        # from queries made before the full zone was loaded.
+        self.bash("rec_control wipe-cache . 2>/dev/null || true")
 
     def ensure(self, **kwargs):
         super().ensure(**kwargs)
