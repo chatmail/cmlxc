@@ -1,12 +1,28 @@
 # Changelog
 
+## [0.13.2] - 2026-05-07
+
+### Fixes
+
+- fix cmlxc version display in workflows that call the reusable lxc-test workflow.
+
+- improve release script to provide full guidance until git push.
+
 ## [0.13.1] - 2026-05-07
 
 ### Features / Changes
 
 - Add one-on-one http-only and smtp-only tests.
 
+### Fixes
+
+- Temporarily disable test_one_on_one_http_only ([#13](https://github.com/chatmail/cmlxc/pull/13)).
 - flush recursor cache after zone load, and fix formatting.
+
+### Miscellaneous Tasks
+
+- re-enable mxdeliv test.
+- release v0.13.1.
 
 ## [0.13.0] - 2026-04-29
 
@@ -270,6 +286,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.13.2]: https://github.com/chatmail/cmlxc/compare/v0.13.1..v0.13.2
 [0.13.1]: https://github.com/chatmail/cmlxc/compare/v0.13.0..v0.13.1
 [0.13.0]: https://github.com/chatmail/cmlxc/compare/v0.12.0..v0.13.0
 [0.12.0]: https://github.com/chatmail/cmlxc/compare/v0.11.0..v0.12.0
