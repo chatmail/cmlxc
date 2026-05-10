@@ -22,6 +22,7 @@ LABEL_DOMAIN = "user.localchat-domain"
 LABEL_DEPLOY_DRIVER = "user.localchat-deploy-driver"
 LABEL_DEPLOYED_AT = "user.localchat-deployed-at"
 LABEL_DEPLOY_SOURCE = "user.localchat-deploy-source"
+LABEL_DEPLOY_TYPE = "user.localchat-deploy-type"
 
 # SSH and Domain config
 SSH_KEY_NAME = "id_localchat"
@@ -222,21 +223,23 @@ class Container:
         )
 
     def get_deploy_state(self):
-        """Return deploy state dict or *None* if not deployed."""
+        """Return deploy state dict, empty if not deployed."""
         data = self.incus.run_json(["list", self.name], check=False)
         if not data or not isinstance(data, list):
-            return None
+            return {}
         config = data[0].get("config", {})
         driver = config.get(LABEL_DEPLOY_DRIVER)
         if not driver:
-            return None
+            return {}
         return {
             "driver": driver,
             "timestamp": config.get(LABEL_DEPLOYED_AT, "Unknown"),
             "source": config.get(LABEL_DEPLOY_SOURCE),
+            "type": config.get(LABEL_DEPLOY_TYPE)
+            or ("ipv4" if driver == "madmail" else "dns"),
         }
 
-    def write_deploy_state(self, deploy_driver, source=None):
+    def write_deploy_state(self, deploy_driver, source=None, deploy_type=None):
         """Record that a deployment of *deploy_driver* occurred."""
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         source_desc = source.description if source else None
@@ -249,12 +252,18 @@ class Container:
         ]
         if source_desc:
             cmd.append(f"{LABEL_DEPLOY_SOURCE}={source_desc}")
+        cmd.append(f"{LABEL_DEPLOY_TYPE}={deploy_type}")
         self.incus.run(cmd)
-        return {"driver": deploy_driver, "timestamp": now, "source": source_desc}
+        return {
+            "driver": deploy_driver,
+            "timestamp": now,
+            "source": source_desc,
+            "type": deploy_type,
+        }
 
     def check_deploy_lock(self, deploy_driver):
         state = self.get_deploy_state()
-        if state is None:
+        if not state:
             return
         if state["driver"] != deploy_driver:
             raise SetupError(
@@ -323,8 +332,7 @@ class RelayContainer(Container):
 
     @property
     def driver_name(self):
-        state = self.get_deploy_state()
-        return state["driver"] if state else None
+        return self.get_deploy_state().get("driver")
 
     def get_repo_path(self, driver_name=None):
         """Return the absolute path to the repo in the builder container."""
@@ -339,15 +347,13 @@ class RelayContainer(Container):
 
     def destroy(self):
         """Destroy current relay container and its checkout in the builder."""
-        state = self.get_deploy_state()
-        if state:
-            driver = state.get("driver")
-            if driver:
-                repo_path = self.get_repo_path(driver)
-                self.incus.run(
-                    ["exec", BUILDER_CONTAINER_NAME, "--", "rm", "-rf", repo_path],
-                    check=False,
-                )
+        driver = self.get_deploy_state().get("driver")
+        if driver:
+            repo_path = self.get_repo_path(driver)
+            self.incus.run(
+                ["exec", BUILDER_CONTAINER_NAME, "--", "rm", "-rf", repo_path],
+                check=False,
+            )
         super().destroy()
 
     def launch(self, image_candidates=None):

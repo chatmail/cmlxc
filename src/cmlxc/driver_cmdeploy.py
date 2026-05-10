@@ -41,10 +41,17 @@ class CmdeployDriver(Driver):
         """Register cmdeploy-specific deploy options."""
         super().add_cli_options(parser, completer=completer)
         parser.add_argument(
-            "--no-dns",
-            dest="no_dns",
+            "--type",
+            dest="type",
+            choices=["dns", "ipv4", "ipv6"],
+            default="dns",
+            help="Deploy the relay using dns (default), ipv4, or ipv6.",
+        )
+        parser.add_argument(
+            "--ipv4-only",
+            dest="ipv4_only",
             action="store_true",
-            help="Deploy the relay with only an IPv4",
+            help="Create containers without IPv6 connectivity.",
         )
         parser.add_argument(
             "--filtermail",
@@ -54,8 +61,22 @@ class CmdeployDriver(Driver):
         )
 
     def configure_from_args(self, args):
-        self.no_dns = bool(args.no_dns)
-        self.filtermail_bin = args.filtermail
+        self.type = args.type
+        self.filtermail_bin = getattr(args, "filtermail", None)
+
+    def get_test_domain_or_ip(self):
+        """Return the IP when deployed without DNS, else the domain."""
+        if not self.ct.ipv4:
+            self.ct.wait_ready()
+        match self.type:
+            case "ipv6":
+                if not self.ct.ipv6:
+                    raise SetupError(f"{self.ct.name} has no IPv6 address.")
+                return self.ct.ipv6
+            case "ipv4":
+                return self.ct.ipv4
+            case _:
+                return self.ct.domain
 
     def on_init_relay(self, repo_path):
         """Hook called by ``init_builder`` to run initenv.sh for the relay."""
@@ -92,12 +113,7 @@ class CmdeployDriver(Driver):
         """Execute the cmdeploy test suite against the relay."""
         with self.out.section("cmdeploytest"):
             self.out.print("Preparing chatmail.ini on builder ...")
-            if self.no_dns:
-                if not self.ct.ipv4:
-                    self.ct.wait_ready()
-                domain = self.ct.ipv4
-            else:
-                domain = self.ct.domain
+            domain = self.get_test_domain_or_ip()
             write_ini(
                 self.bld_ct, self.ct, domain, disable_ipv6=self.ct.is_ipv6_disabled
             )
@@ -107,8 +123,7 @@ class CmdeployDriver(Driver):
             if second_domain:
                 env["CHATMAIL_DOMAIN2"] = second_domain
 
-            test_addr = self.get_test_domain_or_ip()
-            self.out.print(f"Running cmdeploy tests against {test_addr} ...")
+            self.out.print(f"Running cmdeploy tests against {domain} ...")
 
             env_args = "".join(f" --env {k}={v}" for k, v in env.items())
             cmd = (
@@ -131,13 +146,9 @@ class CmdeployDriver(Driver):
         self.bld_ct.write_relay_ssh_config(self.ct)
 
         dns_ct = self.configure_dns()
-        if self.no_dns:
-            if not self.ct.ipv4:
-                self.ct.wait_ready()
-            domain = self.ct.ipv4
-        else:
+        domain = self.get_test_domain_or_ip()
+        if self.type == "dns":
             # Bootstrap minimal A record so cmdeploy can find the relay
-            domain = self.ct.domain
             dns_ct.set_dns_records(
                 domain,
                 f"{domain}. 3600 IN A {self.ct.ipv4}",
@@ -154,7 +165,7 @@ class CmdeployDriver(Driver):
             self.out.print(f"Re-configuring DNS for {self.ct.shortname} ...")
             self.ct.configure_dns(dns_ct.ipv4)
 
-        if not self.no_dns:
+        if self.type == "dns":
             with self.out.section(f"Loading DNS zone: {self.ct.shortname}"):
                 zone_path = f"{self.repo_path}/chatmail.zone"
                 self._run_cmdeploy("dns", "--zonefile", zone_path)
@@ -173,7 +184,7 @@ class CmdeployDriver(Driver):
         with self.out.section("Verifying DNS records"):
             self._run_cmdeploy("dns")
 
-        self.ct.write_deploy_state(CMDEPLOY, source=source)
+        self.ct.write_deploy_state(CMDEPLOY, source=source, deploy_type=self.type)
 
     def _run_cmdeploy(self, subcmd, *extra):
         extra_str = " ".join(extra)

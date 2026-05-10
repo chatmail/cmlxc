@@ -22,6 +22,7 @@ class MadmailDriver(Driver):
     DEFAULT_SOURCE_URL = "https://github.com/themadorg/madmail.git"
     REPO_NAME = MADMAIL
     REQUIRED_SOURCE_PATHS = ["go.mod", "Makefile"]
+    type = "ipv4"
 
     @classmethod
     def add_cli_options(cls, parser, completer=None):
@@ -147,9 +148,7 @@ class MadmailDriver(Driver):
     def run_deploy(self, *, source, ipv4_only=False):
         """Deploy madmail to a single relay container."""
         with self.out.section("Preparing container setup"):
-            self.ct.ensure(
-                ipv4_only=ipv4_only,
-            )
+            self.ct.ensure(ipv4_only=True)
         self.deploy(source=source)
 
     def deploy(self, source=None):
@@ -213,7 +212,7 @@ class MadmailDriver(Driver):
 
             self.ct.bash("rm -f /tmp/madmail")
 
-            self.ct.write_deploy_state(MADMAIL, source=source)
+            self.ct.write_deploy_state(MADMAIL, source=source, deploy_type=self.type)
             self.out.green(f"madmail deployed to {self.ct.shortname} ({ip})")
             print_admin_info(self.out, self.ct, ip)
 

@@ -20,6 +20,7 @@ from cmlxc.container import (
     DOMAIN_SUFFIX,
     LABEL_DEPLOY_DRIVER,
     LABEL_DEPLOY_SOURCE,
+    LABEL_DEPLOY_TYPE,
     LABEL_DOMAIN,
     LABEL_KEY,
     SSH_KEY_NAME,
@@ -215,6 +216,7 @@ class Incus:
                     "status": ct.get("status", "Unknown"),
                     "driver": config.get(LABEL_DEPLOY_DRIVER),
                     "source": config.get(LABEL_DEPLOY_SOURCE),
+                    "type": config.get(LABEL_DEPLOY_TYPE),
                 }
             )
         return containers

@@ -90,6 +90,7 @@ class Driver:
     REPO_NAME: str
     IMAGE_ALIAS: str | None = None
     REQUIRED_SOURCE_PATHS: list[str] = []
+    type: str = "dns"
 
     def __init__(self, ct, out):
         self.ct = ct
@@ -98,6 +99,9 @@ class Driver:
         self.repo_path = f"/root/relays/{self.REPO_NAME}-{ct.shortname}"
         self.venv_path = f"{self.repo_path}/venv"
         self.custom_env = {}
+        state = ct.get_deploy_state()
+        if state:
+            self.type = state["type"]
 
     # ------------------------------------------------------------------
     # Pre-flight checks (shared by all drivers)
@@ -151,12 +155,6 @@ class Driver:
         )
         if completer is not None:
             action.completer = completer
-        parser.add_argument(
-            "--ipv4-only",
-            dest="ipv4_only",
-            action="store_true",
-            help="Create containers without IPv6 connectivity.",
-        )
 
     def configure_from_args(self, args):
         """Apply driver-specific CLI arguments. Override in subclasses."""
@@ -316,7 +314,7 @@ class Driver:
 
             driver.run_deploy(
                 source=source,
-                ipv4_only=args.ipv4_only,
+                ipv4_only=getattr(args, "ipv4_only", False),
             )
             return 0
 

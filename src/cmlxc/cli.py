@@ -168,7 +168,7 @@ def start_cmd(args, out):
     ix = Incus(out)
     for ct in map(ix.get_relay_container, args.names):
         state = ct.get_deploy_state()
-        if state is None:
+        if not state:
             out.red(
                 f"Container {ct.shortname!r} has not been deployed."
                 f" Use 'deploy-cmdeploy' or 'deploy-madmail' first."
@@ -266,12 +266,6 @@ def _add_test_relay_args(parser):
 
 def test_cmdeploy_cmd_options(parser):
     _add_test_relay_args(parser)
-    parser.add_argument(
-        "--no-dns",
-        dest="no_dns",
-        action="store_true",
-        help="Deploy the relay with only an IPv4",
-    )
 
 
 def test_cmdeploy_cmd(args, out):
@@ -279,7 +273,6 @@ def test_cmdeploy_cmd(args, out):
     ix = Incus(out)
     ct = ix.get_running_relay(args.relay)
     driver = CmdeployDriver(ct, out)
-    driver.no_dns = bool(args.no_dns)
     if not driver.check_init():
         return 1
 
@@ -298,7 +291,7 @@ def test_cmdeploy_cmd(args, out):
             if _is_ip_address(drv_b.get_test_domain_or_ip()):
                 continue
 
-            if not args.no_dns:
+            if driver.type == "dns":
                 mx = a.bash(f"dig {b.domain} MX +short", check=False)
                 if not mx or not mx.strip():
                     out.red(
@@ -306,8 +299,8 @@ def test_cmdeploy_cmd(args, out):
                     )
                     return 1
 
-        drv_cls = DRIVER_BY_NAME.get(ct2.driver_name)
-        second_domain = drv_cls(ct2, out).get_test_domain_or_ip()
+        drv2 = DRIVER_BY_NAME[ct2.driver_name](ct2, out)
+        second_domain = drv2.get_test_domain_or_ip()
 
     return driver.run_tests(second_domain=second_domain)
 
@@ -499,7 +492,10 @@ def _print_container_status(out, c, ix):
 
     tag = "running" if is_running else "STOPPED"
     driver = c.get("driver")
-    deploy_label = f"  [{driver}]" if driver else ""
+    deploy_type = c.get("type")
+    deploy_label = f"  [{driver}" if driver else ""
+    if deploy_label:
+        deploy_label += f":{deploy_type}]" if deploy_type else "]"
     out.print(f"{cname:20s} {tag}{deploy_label}")
 
     domain = c.get("domain", "")

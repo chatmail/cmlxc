@@ -14,6 +14,8 @@ import subprocess
 import pytest
 
 from cmlxc.container import BASE_IMAGE_ALIAS, BuilderContainer, DNSContainer
+from cmlxc.driver_cmdeploy import CmdeployDriver
+from cmlxc.driver_madmail import MadmailDriver
 from cmlxc.incus import Incus
 from cmlxc.output import Out
 
@@ -67,6 +69,16 @@ def test_cm_deploy():
     cmlxc("deploy-cmdeploy", "--source", "@main", CT1)
 
 
+def test_cm_deploy_type():
+    ix = Incus(Out())
+    ct0 = ix.get_relay_container(CT0)
+    ct1 = ix.get_relay_container(CT1)
+    assert ct0.get_deploy_state()["type"] == "dns"
+    assert ct1.get_deploy_state()["type"] == "dns"
+    assert CmdeployDriver(ct0, Out()).type == "dns"
+    assert CmdeployDriver(ct1, Out()).type == "dns"
+
+
 def test_mini_cmdeploy():
     cmlxc("test-mini", CT0)
 
@@ -90,7 +102,14 @@ def test_destroy():
 
 
 def test_mad_deploy():
-    cmlxc("deploy-madmail", "--source", "@main", "--ipv4-only", CT_MAD)
+    cmlxc("deploy-madmail", "--source", "@main", CT_MAD)
+
+
+def test_mad_deploy_type():
+    ix = Incus(Out())
+    ct = ix.get_relay_container(CT_MAD)
+    assert ct.get_deploy_state()["type"] == "ipv4"
+    assert MadmailDriver(ct, Out()).type == "ipv4"
 
 
 def test_mini_madmail():

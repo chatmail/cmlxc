@@ -10,6 +10,8 @@ from cmlxc.container import (
     _extract_ip,
     format_ssh_config,
 )
+from cmlxc.driver_cmdeploy import CmdeployDriver
+from cmlxc.driver_madmail import MadmailDriver
 from cmlxc.incus import (
     Incus,
     _is_ip_address,
@@ -108,3 +110,10 @@ def test_check_deploy_lock(ix):
         ct.check_deploy_lock("cmdeploy")
 
     ct.get_deploy_state = original
+
+
+def test_deploy_type_defaults(ix):
+    ct = RelayContainer(ix, "type-test")
+    out = Out()
+    assert CmdeployDriver(ct, out).type == "dns"
+    assert MadmailDriver(ct, out).type == "ipv4"
