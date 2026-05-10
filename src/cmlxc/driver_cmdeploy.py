@@ -48,12 +48,6 @@ class CmdeployDriver(Driver):
             help="Deploy the relay using dns (default), ipv4, or ipv6.",
         )
         parser.add_argument(
-            "--ipv4-only",
-            dest="ipv4_only",
-            action="store_true",
-            help="Create containers without IPv6 connectivity.",
-        )
-        parser.add_argument(
             "--filtermail",
             metavar="PATH",
             type=Path,

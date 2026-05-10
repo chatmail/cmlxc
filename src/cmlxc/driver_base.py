@@ -155,6 +155,12 @@ class Driver:
         )
         if completer is not None:
             action.completer = completer
+        parser.add_argument(
+            "--ipv4-only",
+            dest="ipv4_only",
+            action="store_true",
+            help="Create containers without IPv6 connectivity.",
+        )
 
     def configure_from_args(self, args):
         """Apply driver-specific CLI arguments. Override in subclasses."""
@@ -314,7 +320,7 @@ class Driver:
 
             driver.run_deploy(
                 source=source,
-                ipv4_only=getattr(args, "ipv4_only", False),
+                ipv4_only=args.ipv4_only,
             )
             return 0
 

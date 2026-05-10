@@ -148,7 +148,7 @@ class MadmailDriver(Driver):
     def run_deploy(self, *, source, ipv4_only=False):
         """Deploy madmail to a single relay container."""
         with self.out.section("Preparing container setup"):
-            self.ct.ensure(ipv4_only=True)
+            self.ct.ensure(ipv4_only=ipv4_only)
         self.deploy(source=source)
 
     def deploy(self, source=None):
