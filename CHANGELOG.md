@@ -1,9 +1,21 @@
 # Changelog
 
+## [0.14.1] - 2026-05-10
+
+### Fixes
+
+- reintroduce uniform --ipv4-only option to deploy-* commands which
+  affect container setup not deploy type (DNS, IPV4, IPV6)
+
 ## [0.14.0] - 2026-05-10
 
-- [**breaking**] drop "--no-dns" deploy-cmdeploy and deploy-madmail "--ipv4-only" options
-  introduce "--type=DNS|IPV4|IPV6" deploy-cmdeploy option and default deploy-madmail to ipv4 type
+### Fixes
+
+- [**breaking**] drop "--no-dns" deploy-cmdeploy and deploy-madmail "--ipv4-only" options, in favor of new "--type=DNS|IPV4|IPV6" deploy-cmdeploy option and defaulting deploy-madmail to ipv4 always..
+
+### Miscellaneous Tasks
+
+- release v0.14.0.
 
 ## [0.13.5] - 2026-05-07
 
@@ -321,6 +333,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.14.1]: https://github.com/chatmail/cmlxc/compare/v0.14.0..v0.14.1
 [0.14.0]: https://github.com/chatmail/cmlxc/compare/v0.13.5..v0.14.0
 [0.13.5]: https://github.com/chatmail/cmlxc/compare/v0.13.4..v0.13.5
 [0.13.4]: https://github.com/chatmail/cmlxc/compare/v0.13.3..v0.13.4
