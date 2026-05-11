@@ -1,8 +1,18 @@
 # Changelog
 
+## [0.14.6] - 2026-05-11
+
+- fix: lxc-test reuable gh work flow to never fall back to stale base images
+
 ## [0.14.5] - 2026-05-11
 
+### Fixes
+
 - make dnsutils available in all containers, as it's use for querying dns sanity in various places.
+
+### Miscellaneous Tasks
+
+- release v0.14.5.
 
 ## [0.14.4] - 2026-05-11
 
@@ -371,6 +381,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.14.6]: https://github.com/chatmail/cmlxc/compare/v0.14.5..v0.14.6
 [0.14.5]: https://github.com/chatmail/cmlxc/compare/v0.14.4..v0.14.5
 [0.14.4]: https://github.com/chatmail/cmlxc/compare/v0.14.3..v0.14.4
 [0.14.3]: https://github.com/chatmail/cmlxc/compare/v0.14.2..v0.14.3
