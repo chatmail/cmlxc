@@ -58,9 +58,9 @@ jobs:
       with:
         path: |
           /tmp/incus-cache
-        key: incus-images-v6-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/incus.py') }}
+        key: incus-images-v7-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/incus.py') }}
         restore-keys: |
-          incus-images-v6-${{ runner.os }}-
+          incus-images-v7-${{ runner.os }}-
 
     - name: Import cached images
       run: |
@@ -90,6 +90,7 @@ jobs:
         mkdir -p /tmp/incus-cache
         # Export the builder as a reusable image if it's running
         if incus list -c n --format csv | grep -q builder-localchat; then
+          incus exec builder-localchat -- rm -rf /root/relays /root/minitest-venv /root/.ssh/config*
           echo "Publishing builder container as image ..."
           incus publish builder-localchat --alias localchat-builder --force || true
         fi
