@@ -438,13 +438,15 @@ class RelayContainer(Container):
             == 0
         )
 
-    def configure_dns(self, dns_ip):
+    def setup_resolvconf_localchat_nameserver(self, dns_ip):
         self.bash(f"""
             systemctl disable --now systemd-resolved 2>/dev/null || true
             rm -f /etc/resolv.conf
             printf 'nameserver {dns_ip}\\n' >/etc/resolv.conf
-            mkdir -p /etc/unbound/unbound.conf.d
         """)
+
+    def setup_unbound_localchat_forwarder(self, dns_ip):
+        self.bash("mkdir -p /etc/unbound/unbound.conf.d")
         ip6_line = "  do-ip6: no" if not self.ipv6 else ""
         self.push_file_content(
             "/etc/unbound/unbound.conf.d/localchat-forward.conf",
@@ -459,11 +461,11 @@ class RelayContainer(Container):
             """,
         )
         self.bash("systemctl restart unbound || true")
-        if self.bash("which dig", check=False) is None:
-            self.bash(
-                "DEBIAN_FRONTEND=noninteractive apt-get install -y dnsutils 2>/dev/null"
-            )
-        self._wait_dig(dns_ip)
+        self.bash(
+            "printf 'nameserver 127.0.0.1\\n' | cat - /etc/resolv.conf > /etc/resolv.conf.tmp && mv /etc/resolv.conf.tmp /etc/resolv.conf"
+        )
+        if self.bash("which dig", check=False) is not None:
+            self._wait_dig(dns_ip)
 
 
 class BuilderContainer(Container):

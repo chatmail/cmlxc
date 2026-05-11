@@ -139,7 +139,7 @@ class CmdeployDriver(Driver):
         self.ix.write_ssh_config()
         self.bld_ct.write_relay_ssh_config(self.ct)
 
-        dns_ct = self.configure_dns()
+        dns_ct = self.bootstrap_dns()
         domain = self.get_test_domain_or_ip()
         if self.type == "dns":
             # Bootstrap minimal A record so cmdeploy can find the relay
@@ -157,7 +157,8 @@ class CmdeployDriver(Driver):
 
             # cmdeploy appends 9.9.9.9 to resolv.conf; restore clean state
             self.out.print(f"Re-configuring DNS for {self.ct.shortname} ...")
-            self.ct.configure_dns(dns_ct.ipv4)
+            self.ct.setup_resolvconf_localchat_nameserver(dns_ct.ipv4)
+            self.ct.setup_unbound_localchat_forwarder(dns_ct.ipv4)
 
         if self.type == "dns":
             with self.out.section(f"Loading DNS zone: {self.ct.shortname}"):
@@ -167,6 +168,8 @@ class CmdeployDriver(Driver):
                 zone_content = self.bld_ct.bash(f"cat {zone_path}")
                 self.out.print("  Loading zone content into PowerDNS ...")
                 dns_ct.set_dns_records(self.ct.domain, zone_content)
+                # Flush stale NXDOMAIN entries cached during initial checks
+                self.ct.bash("systemctl restart unbound || true")
 
         self.out.print(f"Restarting filtermail-incoming on {self.ct.shortname} ...")
         self.ct.bash("systemctl restart filtermail-incoming")
@@ -210,6 +213,7 @@ class CmdeployDriver(Driver):
         units = " ".join(f"{s}.service" for s in self._CACHED_DISABLE_SERVICES)
         self.ct.bash("cp /etc/resolv.conf /tmp/resolv.conf.bak")
         self.ct.bash(f"systemctl disable --now {units}")
+        self.ct.bash(f"systemctl enable {units}")
         self.ct.bash("rm -f /etc/resolv.conf")
         self.ix.run(["publish", self.ct.name, f"--alias={self.IMAGE_ALIAS}", "--force"])
         self.ct.bash("cp /tmp/resolv.conf.bak /etc/resolv.conf")

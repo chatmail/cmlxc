@@ -164,12 +164,7 @@ class MadmailDriver(Driver):
             self.ct.wait_ready()
         ip = self.ct.ipv4
 
-        dns_ct = self.configure_dns()
-        dns_ct.set_dns_records(
-            self.ct.domain,
-            f"{self.ct.domain}. 3600 IN A {ip}\n"
-            f"{self.ct.domain}. 3600 IN MX 10 {self.ct.domain}.\n",
-        )
+        self.bootstrap_dns()
 
         with self.out.section(f"madmail deploy: {self.ct.shortname} ({ip})"):
             self.out.print("Pushing madmail binary via SCP ...")
