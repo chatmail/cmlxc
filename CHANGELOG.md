@@ -1,8 +1,20 @@
 # Changelog
 
+## [0.14.7] - 2026-05-11
+
+### CI
+
+- extend fullrun.py testing to cover cmdeploy ip relays.
+
 ## [0.14.6] - 2026-05-11
 
-- fix: lxc-test reuable gh work flow to never fall back to stale base images
+### Fixes
+
+- for lxc-test reuable work flow don't ever fall back to stale base images.
+
+### Miscellaneous Tasks
+
+- release v0.14.6.
 
 ## [0.14.5] - 2026-05-11
 
@@ -381,6 +393,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.14.7]: https://github.com/chatmail/cmlxc/compare/v0.14.6..v0.14.7
 [0.14.6]: https://github.com/chatmail/cmlxc/compare/v0.14.5..v0.14.6
 [0.14.5]: https://github.com/chatmail/cmlxc/compare/v0.14.4..v0.14.5
 [0.14.4]: https://github.com/chatmail/cmlxc/compare/v0.14.3..v0.14.4
