@@ -1,9 +1,18 @@
 # Changelog
 
+## [0.14.5] - 2026-05-11
+
+- make dnsutils available in all containers, as it's use for querying dns sanity in various places.
+
 ## [0.14.4] - 2026-05-11
 
-- avoid initial unncessary initial resolveconf write in relay containers.
+### Miscellaneous Tasks
 
+- release v0.14.4.
+
+### Other
+
+- avoid initial unncessary initial resolveconf write in relays.
 - remove 1GB unneecessary files before caching builder image.
 
 ## [0.14.3] - 2026-05-11
@@ -362,6 +371,7 @@
 
 - initial commit of cmlxc tool.
 
+[0.14.5]: https://github.com/chatmail/cmlxc/compare/v0.14.4..v0.14.5
 [0.14.4]: https://github.com/chatmail/cmlxc/compare/v0.14.3..v0.14.4
 [0.14.3]: https://github.com/chatmail/cmlxc/compare/v0.14.2..v0.14.3
 [0.14.2]: https://github.com/chatmail/cmlxc/compare/v0.14.1..v0.14.2
