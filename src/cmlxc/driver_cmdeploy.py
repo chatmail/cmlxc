@@ -124,10 +124,10 @@ class CmdeployDriver(Driver):
         self.ix.write_ssh_config()
         self.bld_ct.write_relay_ssh_config(self.ct)
 
-        dns_ct = self.bootstrap_dns()
+        dns_ct = self.get_dns_container()
+
         domain = self.get_test_domain_or_ip()
         if self.type == "dns":
-            # Bootstrap minimal A record so cmdeploy can find the relay
             dns_ct.set_dns_records(
                 domain,
                 f"{domain}. 3600 IN A {self.ct.ipv4}",
@@ -140,8 +140,8 @@ class CmdeployDriver(Driver):
             )
             self._run_cmdeploy("run", "--skip-dns-check")
 
-            # cmdeploy appends 9.9.9.9 to resolv.conf; restore clean state
-            self.out.print(f"Re-configuring DNS for {self.ct.shortname} ...")
+            # Reconfigure DNS for localchat after cmdeploy overwrote resolv.conf.
+            self.out.print(f"Configuring localchat DNS for {self.ct.shortname} ...")
             self.ct.setup_resolvconf_localchat_nameserver(dns_ct.ipv4)
             self.ct.setup_unbound_localchat_forwarder(dns_ct.ipv4)
 

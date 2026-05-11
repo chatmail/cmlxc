@@ -273,12 +273,10 @@ class Driver:
         """Return the address used by test commands."""
         return self.ct.domain
 
-    def bootstrap_dns(self):
-        """Bootstrap DNS resolution and return the DNSContainer."""
+    def get_dns_container(self):
+        """Returns a ready DNSContainer."""
         dns_ct = DNSContainer(self.ix)
         dns_ct.wait_ready(timeout=5)
-        self.out.print(f"Configuring DNS for {self.ct.shortname} ...")
-        self.ct.setup_resolvconf_localchat_nameserver(dns_ct.ipv4)
         return dns_ct
 
     # ------------------------------------------------------------------
