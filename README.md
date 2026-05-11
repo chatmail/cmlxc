@@ -182,8 +182,6 @@ builder init, and deploy orchestration.
 - **cmdeploy** -- runs `cmdeploy run` from the builder container over SSH
   into the relay.
   Generates DNS zones, loads them into PowerDNS, and verifies records.
-  After the first successful deploy the relay image is cached as
-  `localchat-cmdeploy` so subsequent containers start pre-populated.
 
 - **madmail** -- builds the `maddy` Go binary inside the builder,
   pushes it via SCP and runs `madmail install --simple --ip <IP>`.

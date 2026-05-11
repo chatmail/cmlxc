@@ -20,19 +20,7 @@ class CmdeployDriver(Driver):
     CLI_DOC = "Deploy a cmdeploy relay into a container."
     DEFAULT_SOURCE_URL = "https://github.com/chatmail/relay.git"
     REPO_NAME = CMDEPLOY
-    IMAGE_ALIAS = "localchat-cmdeploy"
     REQUIRED_SOURCE_PATHS = ["chatmaild", "cmdeploy"]
-
-    _CACHED_DISABLE_SERVICES = [
-        "postfix",
-        "dovecot",
-        "unbound",
-        "opendkim",
-        "nginx",
-        "filtermail",
-        "filtermail-incoming",
-        "fcgiwrap",
-    ]
 
     filtermail_bin = None
 
@@ -94,10 +82,7 @@ class CmdeployDriver(Driver):
     def run_deploy(self, *, source, ipv4_only=False):
         """Deploy cmdeploy to a single relay container."""
         with self.out.section(f"Preparing container setup: {self.ct.shortname}"):
-            self.ct.ensure(
-                ipv4_only=ipv4_only,
-                image_candidates=[self.IMAGE_ALIAS, "localchat-base"],
-            )
+            self.ct.ensure(ipv4_only=ipv4_only)
         t_total = time.time()
         self.deploy(source=source)
         elapsed = time.time() - t_total
@@ -174,10 +159,6 @@ class CmdeployDriver(Driver):
         self.out.print(f"Restarting filtermail-incoming on {self.ct.shortname} ...")
         self.ct.bash("systemctl restart filtermail-incoming")
 
-        if not self.ix.find_image([self.IMAGE_ALIAS]):
-            with self.out.section(f"Caching {self.IMAGE_ALIAS} image"):
-                self._publish_image()
-
         with self.out.section("Verifying DNS records"):
             self._run_cmdeploy("dns")
 
@@ -203,23 +184,6 @@ class CmdeployDriver(Driver):
             raise SetupError(
                 f"cmdeploy {subcmd} failed on {self.ct.shortname} (exit {ret})"
             )
-
-    def _publish_image(self):
-        if self.ix.find_image([self.IMAGE_ALIAS]):
-            return
-        self.out.print(
-            f"  Locally caching {self.ct.name!r} as {self.IMAGE_ALIAS!r} image ..."
-        )
-        units = " ".join(f"{s}.service" for s in self._CACHED_DISABLE_SERVICES)
-        self.ct.bash("cp /etc/resolv.conf /tmp/resolv.conf.bak")
-        self.ct.bash(f"systemctl disable --now {units}")
-        self.ct.bash(f"systemctl enable {units}")
-        self.ct.bash("rm -f /etc/resolv.conf")
-        self.ix.run(["publish", self.ct.name, f"--alias={self.IMAGE_ALIAS}", "--force"])
-        self.ct.bash("cp /tmp/resolv.conf.bak /etc/resolv.conf")
-        self.ct.bash(f"systemctl enable --now {units}")
-        self.ct.wait_ready()
-        self.out.print(f"  Image {self.IMAGE_ALIAS!r} ready.")
 
 
 # ------------------------------------------------------------------

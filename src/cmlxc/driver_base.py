@@ -88,7 +88,6 @@ class Driver:
     CLI_DOC: str
     DEFAULT_SOURCE_URL: str
     REPO_NAME: str
-    IMAGE_ALIAS: str | None = None
     REQUIRED_SOURCE_PATHS: list[str] = []
     type: str = "dns"
 
