@@ -255,7 +255,7 @@ class Incus:
             apt-get -o DPkg::Lock::Timeout=60 update
             DEBIAN_FRONTEND=noninteractive apt-get purge -y unattended-upgrades
             DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                openssh-server python3 gcc python3-dev
+                openssh-server python3 gcc python3-dev dnsutils
             systemctl enable ssh
             apt-get clean
             mkdir -p /root/.ssh

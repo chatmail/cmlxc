@@ -464,8 +464,7 @@ class RelayContainer(Container):
         self.bash(
             "printf 'nameserver 127.0.0.1\\n' | cat - /etc/resolv.conf > /etc/resolv.conf.tmp && mv /etc/resolv.conf.tmp /etc/resolv.conf"
         )
-        if self.bash("which dig", check=False) is not None:
-            self._wait_dig(dns_ip)
+        self._wait_dig(dns_ip)
 
 
 class BuilderContainer(Container):
