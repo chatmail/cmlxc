@@ -197,6 +197,7 @@ def write_ini(builder_ct, ct, domain, disable_ipv6=False):
         "max_user_send_per_minute": 600,
         "max_user_send_burst_size": 100,
         "mtail_address": "127.0.0.1",
+        "ssh_host": domain,
     }
     if disable_ipv6:
         overrides["disable_ipv6"] = "True"
