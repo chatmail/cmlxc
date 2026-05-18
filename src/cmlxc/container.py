@@ -127,6 +127,23 @@ class Container:
         cmd = ["exec", self.name, "--", "bash", "-ec", script]
         return self.incus.run_output(cmd, check=check)
 
+    def bash_get(self, script):
+        """Run script, return stdout or None on failure without printing errors.
+
+        Use for existence checks and polls where None is the expected "absent" signal.
+        """
+        return self.bash(script, check=False)
+
+    def bash_do(self, script):
+        """Run script, print errors on failure but return None instead of raising.
+
+        Use when failure should be visible and the caller handles the None return.
+        """
+        try:
+            return self.bash(script)
+        except subprocess.CalledProcessError:
+            return None
+
     def run_cmd(self, *args, check=True):
         """Run command in container and return stdout."""
         return self.incus.run_output(
