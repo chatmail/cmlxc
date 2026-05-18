@@ -105,7 +105,12 @@ class CmdeployDriver(Driver):
             remote_path = f"{self.repo_path}/filtermail"
             self.out.print(f"  Syncing {local_path.name} to builder ...")
             self.ix.run(
-                ["file", "push", str(local_path), f"{self.bld_ct.name}{remote_path}"]
+                [
+                    "file",
+                    "push",
+                    str(local_path),
+                    f"{self.bld_ct.name}{remote_path}",
+                ]
             )
             self.custom_env["CHATMAIL_FILTERMAIL_BINARY"] = remote_path
 
@@ -202,40 +207,54 @@ class CmdeployDriver(Driver):
 # ------------------------------------------------------------------
 
 
+TEST_INI_OVERRIDES = {
+    "max_user_send_per_minute": 600,
+    "max_user_send_burst_size": 100,
+    # Relays reject new address creation while the machine looks
+    # busy, which a CI runner hosting several containers always
+    # does.  Test relays are throwaway, so lift the gates instead
+    # of losing accounts to unrelated load.
+    "max_load_1m": 1000,
+    "min_available_memory": "1M",
+    "min_free_disk_space": "1M",
+    "mtail_address": "127.0.0.1",
+}
+
+
 def get_ini_overrides(domain, disable_ipv6=False):
     """Return chatmail.ini settings suited for throwaway test relays."""
-    overrides = {
-        "max_user_send_per_minute": 600,
-        "max_user_send_burst_size": 100,
-        # Relays reject new address creation while the machine looks
-        # busy, which a CI runner hosting several containers always
-        # does.  Test relays are throwaway, so lift the gates instead
-        # of losing accounts to unrelated load.
-        "max_load_1m": 1000,
-        "min_available_memory": "1M",
-        "min_free_disk_space": "1M",
-        "mtail_address": "127.0.0.1",
-        "ssh_host": domain,
-    }
+    overrides = dict(TEST_INI_OVERRIDES)
+    overrides["ssh_host"] = domain
     if disable_ipv6:
         overrides["disable_ipv6"] = "True"
     return overrides
 
 
-def write_ini(builder_ct, ct, domain, disable_ipv6=False):
-    """Write a chatmail.ini for *ct* using the builder container."""
-    overrides = get_ini_overrides(domain, disable_ipv6=disable_ipv6)
+def make_ini_script(domain, ini_path, overrides):
+    """Return a Python -c snippet that calls write_initial_config."""
     overrides_str = ", ".join(
         f"'{k}': '{v}'" if isinstance(v, str) else f"'{k}': {v}"
         for k, v in overrides.items()
     )
+    return "\n".join(
+        [
+            "from chatmaild.config import write_initial_config",
+            "from pathlib import Path",
+            f"write_initial_config(Path('{ini_path}'), '{domain}', {{{overrides_str}}})",
+        ]
+    )
+
+
+def write_ini(builder_ct, ct, domain, disable_ipv6=False):
+    """Write a chatmail.ini for *ct* using the builder container."""
+    overrides = get_ini_overrides(domain, disable_ipv6=disable_ipv6)
     repo_path = ct.get_repo_path(CMDEPLOY)
     ini_path = f"{repo_path}/chatmail.ini"
+    venv_path = f"{repo_path}/venv"
+    script = make_ini_script(domain, ini_path, overrides)
     builder_ct.bash(f"""
-        source {repo_path}/venv/bin/activate
+        source {venv_path}/bin/activate
         python3 -c "
-from chatmaild.config import write_initial_config
-from pathlib import Path
-write_initial_config(Path('{ini_path}'), '{domain}', {{{overrides_str}}})
+{script}
 "
     """)
