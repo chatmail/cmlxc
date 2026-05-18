@@ -120,6 +120,23 @@ class Container:
         cmd = ["exec", self.name, "--", "bash", "-ec", script]
         return self.incus.run_output(cmd, check=check)
 
+    def bash_get(self, script):
+        """Run script, return stdout or None on failure without printing errors.
+
+        Use for existence checks and polls where None is the expected "absent" signal.
+        """
+        return self.bash(script, check=False)
+
+    def bash_do(self, script):
+        """Run script, print errors on failure but return None instead of raising.
+
+        Use when failure should be visible and the caller handles the None return.
+        """
+        try:
+            return self.bash(script)
+        except subprocess.CalledProcessError:
+            return None
+
     def run_cmd(self, *args, check=True):
         """Run command in container and return stdout."""
         return self.incus.run_output(
@@ -586,7 +603,12 @@ class BuilderContainer(Container):
         key = self.incus.ssh_key_path
         self.bash("mkdir -p /root/.ssh/config.d && chmod 700 /root/.ssh")
         self.incus.run(
-            ["file", "push", str(key), f"{self.name}/root/.ssh/id_localchat"]
+            [
+                "file",
+                "push",
+                str(key),
+                f"{self.name}/root/.ssh/id_localchat",
+            ]
         )
         self.bash("chown root:root /root/.ssh/id_localchat")
         self.bash("chmod 600 /root/.ssh/id_localchat")
