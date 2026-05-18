@@ -265,7 +265,7 @@ class Driver:
             bld_ct.setup_repo(tmp_dest, out, source)
         else:
             out.print(f"  Fetching {cls.REPO_NAME}-git-main from upstream ...")
-            bld_ct.bash(f"cd {tmp_dest} && git fetch origin")
+            bld_ct.bash(f"cd {tmp_dest} && git fetch origin --tags")
 
         # Driver-specific toolchain setup
         cls.on_prep_builder(out, bld_ct, tmp_dest)
