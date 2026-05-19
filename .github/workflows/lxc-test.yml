@@ -45,8 +45,9 @@ jobs:
         run: |
           i=1
           while IFS= read -r line || [ -n "$line" ]; do
-            [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
-            echo "cmd${i}=${line}" >> "$GITHUB_OUTPUT"
+            trimmed=$(echo "$line" | xargs)
+            [[ -z "$trimmed" || "$trimmed" == "#"* ]] && continue
+            echo "cmd${i}=${trimmed}" >> "$GITHUB_OUTPUT"
             i=$((i+1))
           done <<< "$CMLXC_COMMANDS"
           echo "count=$((i-1))" >> "$GITHUB_OUTPUT"
@@ -69,7 +70,6 @@ jobs:
           repository: chatmail/cmlxc
           ref: ${{ inputs.cmlxc_version }}
           path: cmlxc
-          fetch-depth: 0
           persist-credentials: false
 
       - name: Install Incus (Zabbly)
@@ -79,6 +79,7 @@ jobs:
           echo "deb [signed-by=/etc/apt/keyrings/zabbly.asc] https://pkgs.zabbly.com/incus/stable $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/zabbly-incus.list
           sudo apt-get update
           sudo apt-get install -y incus-client=1:7.2* incus-base=1:7.2*
+          incus --version
 
       - name: Initialise Incus
         run: |
@@ -86,6 +87,10 @@ jobs:
           sudo iptables -P FORWARD ACCEPT
           sudo sysctl -w fs.inotify.max_user_instances=65535
           sudo sysctl -w fs.inotify.max_user_watches=65535
+          # Disable AppArmor restrictions so Docker-in-LXC containers
+          # can run systemd (needs cgroup notification socket access).
+          sudo systemctl stop apparmor || true
+          sudo apparmor_parser -R /etc/apparmor.d/* 2>/dev/null || true
           sudo incus admin init --auto
           sudo chmod 666 /var/lib/incus/unix.socket
           sudo chown -R $USER:$USER ~/.config/incus
@@ -103,17 +108,19 @@ jobs:
           uv tool install ./cmlxc
           uv --color never tool dir --bin >> "$GITHUB_PATH"
 
-      - name: Cache Incus images
+      - name: Restore Incus image cache
         id: cache-images
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v5
         with:
           path: /tmp/incus-cache
           key: incus-v5-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/*.py') }}
+          restore-keys: |
+            incus-v5-${{ runner.os }}-
 
       - name: Import cached images
         run: |
           mkdir -p /tmp/incus-cache
-          for alias in localchat-base localchat-builder; do
+          for alias in localchat-base localchat-builder localchat-cmdeploy localchat-docker; do
             if [ -f /tmp/incus-cache/$alias.tar.gz ]; then
               echo "Importing: $alias"
               incus image import /tmp/incus-cache/$alias.tar.gz --alias $alias || true
@@ -176,12 +183,12 @@ jobs:
           set -eu
           i=0
           while IFS= read -r cmd || [ -n "$cmd" ]; do
-            [[ "$cmd" =~ ^[[:space:]]*(#|$) ]] && continue
+            trimmed=$(echo "$cmd" | xargs)
+            [[ -z "$trimmed" || "$trimmed" == "#"* ]] && continue
             i=$((i+1))
             if [ $i -le 12 ]; then continue; fi
-
-            echo "::group::Run: $cmd"
-            eval "$cmd" || { echo "::endgroup::"; exit 1; }
+            echo "::group::Run: $trimmed"
+            eval "$trimmed" || { echo "::endgroup::"; exit 1; }
             echo "::endgroup::"
           done <<< "$CMLXC_COMMANDS"
 
@@ -190,7 +197,23 @@ jobs:
         run: |
           for c in $(incus list -c n --format csv); do
             echo "::group::Logs for $c"
-            incus exec "$c" -- journalctl -p warning --no-pager -n 100 || true
+            incus exec "$c" -- journalctl --no-pager -n 200 || true
+            # Dump Docker container logs if present
+            svc=chatmail
+            if incus exec "$c" -- docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "$svc"; then
+              echo "--- docker logs $svc ---"
+              incus exec "$c" -- docker logs "$svc" --tail 200 2>&1 || true
+              echo "--- dovecot journal ---"
+              incus exec "$c" -- docker exec "$svc" journalctl -u dovecot --no-pager -n 50 2>&1 || true
+              echo "--- postfix journal ---"
+              incus exec "$c" -- docker exec "$svc" journalctl -u postfix --no-pager -n 50 2>&1 || true
+              echo "--- failed units ---"
+              incus exec "$c" -- docker exec "$svc" systemctl --failed --no-pager 2>&1 || true
+              echo "--- dovecot -n (effective config) ---"
+              incus exec "$c" -- docker exec "$svc" dovecot -n 2>&1 | tail -40 || true
+              echo "--- ssl cert check ---"
+              incus exec "$c" -- docker exec "$svc" ls -la /etc/ssl/certs/mailserver.pem /etc/ssl/private/mailserver.key 2>&1 || true
+            fi
             echo "::endgroup::"
           done
 
@@ -198,18 +221,49 @@ jobs:
         if: always() && steps.cache-images.outputs.cache-hit != 'true'
         run: |
           mkdir -p /tmp/incus-cache
+          # Publish the builder LXC container as a cached image (the Docker
+          # container inside gets recreated on compose up, so the LXC is clean).
+          # Only skip localchat-cmdeploy on failure -- it bakes deploy state
+          # directly into the LXC and would carry broken config into the next run.
           if incus list -c n --format csv | grep -q builder-localchat; then
-            incus exec builder-localchat -- rm -rf /root/relays /root/minitest-venv /root/.ssh/config*
+            echo "Cleaning up builder container before publishing ..."
+            incus exec builder-localchat -- bash -c 'rm -rf /root/relays/* /root/.cache/* /root/.npm /root/.bun'
             echo "Publishing builder container as image ..."
             incus publish builder-localchat --alias localchat-builder --force || true
           fi
-          for alias in localchat-base localchat-builder; do
+          # Publish Docker relay container with engine only (strip images to keep cache small)
+          for ct in $(incus list -c n --format csv | grep -v builder); do
+            if incus exec "$ct" -- docker info >/dev/null 2>&1; then
+              echo "Stripping Docker images from $ct ..."
+              incus exec "$ct" -- docker system prune -af --volumes 2>/dev/null || true
+              echo "Publishing $ct as localchat-docker ..."
+              incus publish "$ct" --alias localchat-docker --force || true
+              break
+            fi
+          done
+          exported=0
+          if [ "${{ job.status }}" = "success" ]; then
+            aliases="localchat-base localchat-builder localchat-cmdeploy localchat-docker"
+          else
+            aliases="localchat-base localchat-builder localchat-docker"
+          fi
+          for alias in $aliases; do
             if incus image list --format csv -c l | grep -q "^$alias$"; then
               echo "Exporting: $alias"
               incus image export $alias /tmp/incus-cache/$alias || true
               if [ -f /tmp/incus-cache/$alias ] && [ ! -f /tmp/incus-cache/$alias.tar.gz ]; then
                 mv /tmp/incus-cache/$alias /tmp/incus-cache/$alias.tar.gz
               fi
+              exported=$((exported+1))
             fi
           done
+          echo "exported=$exported" >> "$GITHUB_OUTPUT"
+        id: export-images
+
+      - name: Save Incus image cache
+        if: always() && steps.export-images.outputs.exported > 0
+        uses: actions/cache/save@v5
+        with:
+          path: /tmp/incus-cache
+          key: incus-v5-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/*.py') }}
 
