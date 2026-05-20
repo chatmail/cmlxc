@@ -1,0 +1,31 @@
+name: Nightly relay integration
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    uses: ./.github/workflows/lxc-test.yml
+    with:
+      cmlxc_commands: |
+        cmlxc init
+        cmlxc deploy-cmdeploy --source @main fulltest0
+        cmlxc deploy-cmdeploy --source @main fulltest1
+        cmlxc test-mini fulltest0
+        cmlxc test-cmdeploy fulltest0 fulltest1
+        cmlxc stop fulltest0 fulltest1
+        cmlxc destroy fulltest1
+        cmlxc deploy-cmdeploy --type ipv4 --source @main fulltest-ip0
+        cmlxc test-mini fulltest-ip0
+        cmlxc test-cmdeploy fulltest-ip0
+        cmlxc deploy-madmail fulltest-mad0
+        cmlxc test-mini fulltest-mad0
+        cmlxc test-madmail fulltest-mad0
+        cmlxc test-mini fulltest0 fulltest-mad0
+        cmlxc test-mini fulltest-mad0 fulltest0
+        cmlxc test-mini fulltest-ip0 fulltest-mad0
+        cmlxc test-mini fulltest-mad0 fulltest-ip0
+        cmlxc test-mini fulltest-ip0 fulltest0
+        cmlxc test-mini fulltest0 fulltest-ip0
