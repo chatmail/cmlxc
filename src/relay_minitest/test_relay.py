@@ -2,12 +2,12 @@ import imaplib
 import ipaddress
 import smtplib
 import ssl
+import time
 from email.mime.text import MIMEText
 
 import imap_tools
 import pytest
 import requests
-import time
 
 def test_login_basic_functioning(cmsetup, lp):
     """Test that an initial login creates a user automatically"""
