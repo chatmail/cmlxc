@@ -126,7 +126,7 @@ def test_cm_ipv4_test():
 
 
 def test_mad_deploy():
-    cmlxc("deploy-madmail", "--source", "@main", CT_MAD)
+    cmlxc("deploy-madmail", CT_MAD)
 
 
 def test_mad_deploy_type():
