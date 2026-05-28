@@ -168,6 +168,7 @@ class ChatmailACFactory:
                 if self.ssl_context:
                     config["certificateChecks"] = "acceptInvalidCertificates"
                 account.add_or_update_transport(config)
+            account.set_config("bcc_self", "1")
             account.bring_online()
             accounts.append(account)
         return accounts
