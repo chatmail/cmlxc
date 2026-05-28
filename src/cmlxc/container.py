@@ -493,8 +493,8 @@ class BuilderContainer(Container):
                 /root/minitest-venv/bin/pip install \
                     pytest \
                     pytest-xdist \
-                    deltachat-rpc-client==2.49.0 \
-                    deltachat-rpc-server==2.49.0 \
+                    deltachat-rpc-client \
+                    deltachat-rpc-server \
                     imap-tools \
                     requests \
                     python-dotenv \
