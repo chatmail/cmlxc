@@ -107,14 +107,15 @@ def test_hide_senders_ip_address(cmfactory, ssl_context):
     assert ipaddress.ip_address(public_ip)
 
     user1, user2 = cmfactory.get_online_accounts(2)
+    user1.set_config("bcc_self", "1")
     chat = cmfactory.get_accepted_chat(user1, user2)
 
     chat.send_text("testing submission header cleanup")
     user2.wait_for_incoming_msg()
 
-    addr = user2.get_config("addr")
-    host = addr.split("@")[1].strip("[]")
-    pw = user2.get_config("mail_pw")
+    addr = user1.get_config("addr")
+    host = addr.split("@")[1].strip("[").strip("]")
+    pw = user1.get_config("mail_pw")
     mailbox = imap_tools.MailBox(host, ssl_context=ssl_context)
     mailbox.login(addr, pw)
 
@@ -130,7 +131,6 @@ def test_hide_senders_ip_address(cmfactory, ssl_context):
 
     assert msgs, "expected at least one message"
     assert public_ip not in msgs[-1].obj.as_string()
-
 def test_unencrypted_rejection(cmsetup, lp):
     """Test that unencrypted messages are rejected by the relay."""
     lp.sec("creating users")
