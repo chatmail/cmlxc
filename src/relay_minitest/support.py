@@ -168,8 +168,6 @@ class ChatmailACFactory:
                 if self.ssl_context:
                     config["certificateChecks"] = "acceptInvalidCertificates"
                 account.add_or_update_transport(config)
-            # commenting out for testing, appears unsupported in 2.50
-            # account.set_config("delete_server_after", "10")
             account.bring_online()
             accounts.append(account)
         return accounts
