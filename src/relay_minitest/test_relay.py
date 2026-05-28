@@ -102,7 +102,6 @@ class TestMultiRelay:
         msg2 = ac2.wait_for_incoming_msg()
         assert msg2.get_snapshot().text == "should still arrive over smtp"
 
-
 def test_hide_senders_ip_address(cmfactory, ssl_context):
     public_ip = requests.get("http://icanhazip.com").content.decode().strip()
     assert ipaddress.ip_address(public_ip)
@@ -112,15 +111,25 @@ def test_hide_senders_ip_address(cmfactory, ssl_context):
 
     chat.send_text("testing submission header cleanup")
     user2.wait_for_incoming_msg()
+
     addr = user2.get_config("addr")
     host = addr.split("@")[1].strip("[]")
     pw = user2.get_config("mail_pw")
     mailbox = imap_tools.MailBox(host, ssl_context=ssl_context)
     mailbox.login(addr, pw)
-    msgs = list(mailbox.fetch(mark_seen=False))
-    assert msgs, "expected at least one message"
-    assert public_ip not in msgs[0].obj.as_string()
 
+    deadline = time.time() + 10
+    msgs = []
+
+    while time.time() < deadline:
+        mailbox.folder.set("INBOX")
+        msgs = list(mailbox.fetch(criteria="ALL", mark_seen=False))
+        if msgs:
+            break
+        time.sleep(0.5)
+
+    assert msgs, "expected at least one message"
+    assert public_ip not in msgs[-1].obj.as_string()
 
 def test_unencrypted_rejection(cmsetup, lp):
     """Test that unencrypted messages are rejected by the relay."""
