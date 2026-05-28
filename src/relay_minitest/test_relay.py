@@ -9,6 +9,7 @@ import imap_tools
 import pytest
 import requests
 
+
 def test_login_basic_functioning(cmsetup, lp):
     """Test that an initial login creates a user automatically"""
     lp.sec("creating user and checking auto-creation")
