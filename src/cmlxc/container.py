@@ -538,7 +538,7 @@ class BuilderContainer(Container):
         name = dest.rsplit("/", 1)[-1]
         self.bash(f"rm -rf {dest}")
         out.print(f"  Initial clone of {name} ...")
-        self.bash(f"git clone {source.url} {dest}")
+        self.bash(f"git clone --branch {source.ref} {source.url} {dest}")
 
     def get_repo_status(self, repo_path):
         """Return a one-line string describing the git repo at repo_path."""

@@ -89,6 +89,7 @@ class Driver:
     DEFAULT_SOURCE_URL: str
     REPO_NAME: str
     REQUIRED_SOURCE_PATHS: list[str] = []
+    DEFAULT_REF: str = "main"
     type: str = "dns"
 
     def __init__(self, ct, out):
@@ -143,9 +144,9 @@ class Driver:
         """Register ``deploy-*`` CLI options on *parser*."""
         parser.add_argument(
             "--source",
-            default="@main",
+            default=f"@{cls.DEFAULT_REF}",
             metavar="SOURCE",
-            help="Driver source: @ref, /path, ./path, or URL@ref (default: @main).",
+            help=f"Driver source: @ref, /path, ./path, or URL@ref (default: @{cls.DEFAULT_REF}).",
         )
         action = parser.add_argument(
             "name",
@@ -220,7 +221,7 @@ class Driver:
 
         tmp_dest = f"/root/{cls.REPO_NAME}-git-main"
         if bld_ct.bash(f"test -d {tmp_dest}", check=False) is None:
-            source = parse_source("@main", cls.DEFAULT_SOURCE_URL)
+            source = parse_source(f"@{cls.DEFAULT_REF}", cls.DEFAULT_SOURCE_URL)
             bld_ct.setup_repo(tmp_dest, out, source)
         else:
             out.print(f"  Fetching {cls.REPO_NAME}-git-main from upstream ...")
