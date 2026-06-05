@@ -29,7 +29,7 @@ SSH_KEY_NAME = "id_localchat"
 DOMAIN_SUFFIX = ".localchat"
 
 # Image names
-UPSTREAM_IMAGE = "images:debian/12"
+UPSTREAM_IMAGE = "images:debian/13"
 BASE_IMAGE_ALIAS = "localchat-base"
 
 # Builder container

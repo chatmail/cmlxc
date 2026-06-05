@@ -21,7 +21,7 @@ as containers can run with user privileges.
 
 You can verify your incus installation like this:
 
-    incus launch images:debian/12 local-my-setup
+    incus launch images:debian/13 local-my-setup
 
 If this command fails, please check the incus documentation.
 If you get an error about "Failed instance creation", 
