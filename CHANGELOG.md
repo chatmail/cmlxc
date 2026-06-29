@@ -1,4 +1,15 @@
-# Changelog
+## [0.15.0] - 2026-06-29
+
+### Features / Changes
+
+- support cd src/relay_minitest && pytest --relay1 IPADDRESS.
+
+### Fixes
+
+- hardcode ssh_host chatmail.ini option to mail_domain.
+- retain messages on imap folder via better method.
+- fixate madmail to the last Go version  ([#23](https://github.com/chatmail/cmlxc/pull/23)).
+- adapt to 7.2 configuration handling see https://discuss.linuxcontainers.org/t/incus-7-2-has-been-released/26879#p-91682-better-os-specific-handling-of-cli-configuration-7.
 
 ## [0.15.0] - 2026-06-29
 
