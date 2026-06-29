@@ -76,7 +76,8 @@ jobs:
           sudo curl -fsSL https://pkgs.zabbly.com/key.asc -o /etc/apt/keyrings/zabbly.asc
           echo "deb [signed-by=/etc/apt/keyrings/zabbly.asc] https://pkgs.zabbly.com/incus/stable $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/zabbly-incus.list
           sudo apt-get update
-          sudo apt-get install -y incus
+          sudo apt-get install -y incus=1:7.2* incus-client=1:7.2* incus-base=1:7.2*
+          incus --version
 
       - name: Initialise Incus
         run: |
@@ -86,6 +87,7 @@ jobs:
           sudo sysctl -w fs.inotify.max_user_watches=65535
           sudo incus admin init --auto
           sudo chmod 666 /var/lib/incus/unix.socket
+          sudo chown -R $USER:$USER ~/.config/incus
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -102,7 +104,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: /tmp/incus-cache
-          key: incus-v4-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/*.py') }}
+          key: incus-v5-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/*.py') }}
 
       - name: Import cached images
         run: |
