@@ -32,17 +32,9 @@ that messes up container networking.
 
 ## Installation
 
-With pip:
+With [uv](https://docs.astral.sh/uv/):
 
-    python -m venv venv
-    source venv/bin/activate
-    pip install cmlxc
-
-Or with [uv](https://docs.astral.sh/uv/):
-
-    uv venv venv
-    source venv/bin/activate
-    uv pip install cmlxc
+    uv tool install cmlxc
 
 
 ## Usage
@@ -195,32 +187,18 @@ The changelog is generated with [git-cliff](https://git-cliff.org/)
 using the `cliff.toml` config in the repo root.
 
 
-To make a new release, use the provided script:
+Releases run the Incus functional suite in CI before publishing, so
+run it locally first to avoid pushing a tag that cannot be released:
 
-    ./make_new_release.py
+    pytest tests/fullrun.py
 
-The script automates the following steps:
+Then run the shared release script from a checkout of
+[chatmail/workflows](https://github.com/chatmail/workflows):
 
-1. **Test** the codebase by running a full `tox` suite and functional
-   tests (`pytest tests/fullrun.py`).
+    python ../workflows/scripts/make_new_release.py
 
-2. **Preview** unreleased changes with `git cliff`.
-
-3. **Tag** the release (suggesting automatic, micro, or minor bump).
-
-4. **Generate** the full changelog into `CHANGELOG.md`.
-
-5. **Edit** the changelog manually (opens your `$EDITOR`).
-
-6. **Amend** the tag commit to include the changelog update.
-
-7. **Force-tag** the amended commit.
-
-
-After the script finishes, push the changes:
-
-    git push origin main --tags
-
-
-The `release.yml` GitHub workflow triggers on pushed `v*` tags,
-builds the sdist + wheel, and publishes to PyPI via trusted publishing (OIDC).
+It runs the checks, tests the built wheel, generates the CHANGELOG.md
+entry with git-cliff and opens it in your editor, then commits, tags
+vX.Y.Z and pushes. The release.yml workflow re-runs the Incus suite,
+builds the sdist + wheel and publishes to PyPI via trusted publishing
+(OIDC); no local twine or PyPI token is involved.

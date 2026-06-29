@@ -1,5 +1,7 @@
 """Lightweight unit tests for pure logic in cmlxc.incus."""
 
+import shutil
+
 import pytest
 
 from cmlxc.container import (
@@ -17,6 +19,11 @@ from cmlxc.incus import (
     _is_ip_address,
 )
 from cmlxc.output import Out
+
+needs_incus = pytest.mark.skipif(
+    shutil.which("incus") is None,
+    reason="queries container state through the incus binary",
+)
 
 
 @pytest.fixture(scope="module")
@@ -93,6 +100,7 @@ def test_format_ssh_config():
     assert "ns-localchat" not in text
 
 
+@needs_incus
 def test_check_deploy_lock(ix):
     ct = RelayContainer(ix, "deploylock-test")
     # no prior state — should not raise
@@ -112,6 +120,7 @@ def test_check_deploy_lock(ix):
     ct.get_deploy_state = original
 
 
+@needs_incus
 def test_deploy_type_defaults(ix):
     ct = RelayContainer(ix, "type-test")
     out = Out()

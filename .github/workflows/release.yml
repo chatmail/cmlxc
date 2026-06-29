@@ -9,33 +9,20 @@ permissions:
   contents: read
 
 jobs:
+  # Full Incus functional suite gates every release.
   test:
     uses: ./.github/workflows/test.yml
 
-  build:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+  # Checks, unit tests and build via the shared reusable workflow,
+  # which uploads the distributions as a "dist" artifact.
+  py-checks:
+    uses: chatmail/workflows/.github/workflows/py-checks.yml@main
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      - name: Build sdist and wheel
-        run: |
-          pip install build
-          python -m build
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: dist
-          path: dist/
-
+  # The publish job must stay here in the repo's own workflow: PyPI
+  # trusted publishing rejects publishes from reusable workflows.
+  # See https://github.com/pypi/warehouse/issues/11096
   publish:
-    needs: build
+    needs: [test, py-checks]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -48,4 +35,6 @@ jobs:
 
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          skip-existing: true
+          # Fail loudly instead of skipping silently when the
+          # version was already published.
+          skip-existing: false

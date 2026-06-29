@@ -43,9 +43,7 @@ sort_commits = "oldest"
 
 [changelog]
 # changelog header
-header = """
-# Changelog\n
-"""
+header = ""
 # template for the changelog body
 # https://keats.github.io/tera/docs/#templates
 body = """
