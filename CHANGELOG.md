@@ -1,3 +1,10 @@
+
+## [0.16.0] - 2026-07-27
+
+### Features / Changes
+
+- use standard chatmail/workflows checks and release flows.
+
 ## [0.15.0] - 2026-06-29
 
 ### Features / Changes
