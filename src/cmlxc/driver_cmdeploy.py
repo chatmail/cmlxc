@@ -191,16 +191,29 @@ class CmdeployDriver(Driver):
 # ------------------------------------------------------------------
 
 
-def write_ini(builder_ct, ct, domain, disable_ipv6=False):
-    """Write a chatmail.ini for *ct* using the builder container."""
+def get_ini_overrides(domain, disable_ipv6=False):
+    """Return chatmail.ini settings suited for throwaway test relays."""
     overrides = {
         "max_user_send_per_minute": 600,
         "max_user_send_burst_size": 100,
+        # Relays reject new address creation while the machine looks
+        # busy, which a CI runner hosting several containers always
+        # does.  Test relays are throwaway, so lift the gates instead
+        # of losing accounts to unrelated load.
+        "max_load_per_cpu_1m": 1000,
+        "min_available_memory": "1M",
+        "min_free_disk_space": "1M",
         "mtail_address": "127.0.0.1",
         "ssh_host": domain,
     }
     if disable_ipv6:
         overrides["disable_ipv6"] = "True"
+    return overrides
+
+
+def write_ini(builder_ct, ct, domain, disable_ipv6=False):
+    """Write a chatmail.ini for *ct* using the builder container."""
+    overrides = get_ini_overrides(domain, disable_ipv6=disable_ipv6)
     overrides_str = ", ".join(
         f"'{k}': '{v}'" if isinstance(v, str) else f"'{k}': {v}"
         for k, v in overrides.items()

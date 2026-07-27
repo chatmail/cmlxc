@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from cmlxc.driver_base import SourceSpec, parse_source, validate_relay_name
+from cmlxc.driver_cmdeploy import get_ini_overrides
 
 URL = "https://github.com/chatmail/relay.git"
 
@@ -46,3 +47,17 @@ def test_validate_relay_name_rejects_invalid(bad):
 @pytest.mark.parametrize("good", ["cm0", "relay-1", "t0", "mad2-noinsecure"])
 def test_validate_relay_name_accepts_valid(good):
     validate_relay_name(good)
+
+
+def test_ini_overrides_lift_resource_gates():
+    """Loaded CI runners must not make relays refuse new addresses."""
+    overrides = get_ini_overrides("cm0.localchat")
+    assert overrides["max_load_per_cpu_1m"] >= 1000
+    assert overrides["min_available_memory"] == "1M"
+    assert overrides["min_free_disk_space"] == "1M"
+
+
+def test_ini_overrides_disable_ipv6():
+    assert "disable_ipv6" not in get_ini_overrides("cm0.localchat")
+    overrides = get_ini_overrides("cm0.localchat", disable_ipv6=True)
+    assert overrides["disable_ipv6"] == "True"
