@@ -11,6 +11,9 @@ on:
     branches: [ main ]
   workflow_call:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   # Superseded pull request runs are cancelled
@@ -23,7 +26,7 @@ jobs:
     timeout-minutes: 30
     steps:
     - name: Checkout cmlxc
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         path: cmlxc
 
@@ -48,20 +51,20 @@ jobs:
         sudo chmod 666 /var/lib/incus/unix.socket
         sudo chown -R $USER:$USER ~/.config/incus
 
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: "3.11"
+    - uses: astral-sh/setup-uv@v9.0.0
 
-    - name: Install cmlxc
+    # No Python version is pinned here on purpose: uv picks an
+    # interpreter satisfying cmlxc's requires-python, so this file
+    # can never disagree with the checkout it installs.
+    - name: Install cmlxc and pytest
+      working-directory: cmlxc
       run: |
-        python -m pip install --upgrade pip
-        pip install -e ./cmlxc
-        pip install pytest
+        uv venv
+        uv pip install -e . pytest
 
     - name: Cache Incus images
       id: cache-images
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           /tmp/incus-cache
@@ -83,11 +86,13 @@ jobs:
     # container state are skipped there for lack of the incus binary.
     - name: Run unit tests
       working-directory: cmlxc
-      run: pytest tests/
+      run: uv run --no-sync pytest tests/
 
+    # "uv run" puts .venv/bin on PATH, which fullrun.py needs: it
+    # drives the cmlxc console script as a subprocess.
     - name: Run fullrun tests
       working-directory: cmlxc
-      run: pytest tests/fullrun.py
+      run: uv run --no-sync pytest tests/fullrun.py
 
     - name: Export images for cache
       if: always() && steps.cache-images.outputs.cache-hit != 'true'
