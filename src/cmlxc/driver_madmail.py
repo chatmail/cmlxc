@@ -22,7 +22,7 @@ class MadmailDriver(Driver):
     DEFAULT_SOURCE_URL = "https://github.com/themadorg/madmail.git"
     REPO_NAME = MADMAIL
     REQUIRED_SOURCE_PATHS = ["go.mod", "Makefile"]
-    DEFAULT_REF = "v0.47.1"
+    DEFAULT_REF = "latest"
     type = "ipv4"
 
     @classmethod

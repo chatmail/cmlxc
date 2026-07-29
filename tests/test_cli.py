@@ -18,7 +18,9 @@ from cmlxc.driver_cmdeploy import get_ini_overrides
 URL = "https://github.com/chatmail/relay.git"
 
 # @latest lookup uses git ls-remote, skip according tests if absent.
-requires_git = pytest.mark.skipif(shutil.which("git") is None, reason="git binary not on PATH")
+requires_git = pytest.mark.skipif(
+    shutil.which("git") is None, reason="git binary not on PATH"
+)
 
 
 def _git(cwd, *args):
@@ -35,8 +37,21 @@ def _git(cwd, *args):
 def tagged_repo(tmp_path):
     """A real local git repo modelling the relay tag scheme."""
     repo = tmp_path / "repo"
-    subprocess.run(["git", "init", "-q", str(repo)], check=True, capture_output=True, text=True)
-    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init")
+    subprocess.run(
+        ["git", "init", "-q", str(repo)], check=True, capture_output=True, text=True
+    )
+    _git(
+        repo,
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "user.name=t",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "init",
+    )
     for tag in ("1.8.0", "1.9.0", "1.10.0-rc1", "withlmtp"):
         _git(repo, "tag", tag)
     return str(repo)
@@ -54,7 +69,9 @@ def tagged_repo(tmp_path):
         ("../relay", SourceSpec("local", path=Path("../relay"))),
         (
             "https://github.com/fork/relay.git@my-branch",
-            SourceSpec("remote", url="https://github.com/fork/relay.git", ref="my-branch"),
+            SourceSpec(
+                "remote", url="https://github.com/fork/relay.git", ref="my-branch"
+            ),
         ),
         ("hpk/new-lxc-test", SourceSpec("remote", url=URL, ref="hpk/new-lxc-test")),
     ],
@@ -97,20 +114,26 @@ def test_ini_overrides_disable_ipv6():
 @requires_git
 def test_source_latest(tagged_repo):
     """@latest resolves to the newest stable tag via real git ls-remote."""
-    assert resolve_source(parse_source("@latest", tagged_repo)) == SourceSpec("remote", url=tagged_repo, ref="1.9.0")
+    assert resolve_source(parse_source("@latest", tagged_repo)) == SourceSpec(
+        "remote", url=tagged_repo, ref="1.9.0"
+    )
 
 
 @requires_git
 def test_source_main(tagged_repo):
     """@main is a branch, not a tag, passed through"""
-    assert resolve_source(parse_source("@main", tagged_repo)) == SourceSpec("remote", url=tagged_repo, ref="main")
+    assert resolve_source(parse_source("@main", tagged_repo)) == SourceSpec(
+        "remote", url=tagged_repo, ref="main"
+    )
 
 
 @requires_git
 def test_source_latest_no_tags(tmp_path):
     """@latest against a real repo with no tags fails with SetupError."""
     empty = tmp_path / "empty"
-    subprocess.run(["git", "init", "-q", str(empty)], check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "init", "-q", str(empty)], check=True, capture_output=True, text=True
+    )
     with pytest.raises(SetupError, match="No tags found"):
         resolve_source(parse_source("@latest", str(empty)))
 

@@ -81,7 +81,7 @@ def get_latest_tag(url: str) -> str:
     except (subprocess.SubprocessError, OSError) as e:
         raise SetupError(f"Failed to resolve @latest for {url}: {e}")
 
-    # Lines are "<sha>\trefs/tags/<tag>", newest first. Extract first match of X.Y.Z, 
+    # Lines are "<sha>\trefs/tags/<tag>", newest first. Extract first match of X.Y.Z,
     # optional leading "v", tags, skips pre-release (X.Y.Z-rc1) and non-semver tags.
     tags = re.findall(r"\trefs/tags/(v?\d+\.\d+\.\d+)$", result.stdout, re.M)
     if tags:
@@ -259,7 +259,9 @@ class Driver:
 
         tmp_dest = f"/root/{cls.REPO_NAME}-git-main"
         if bld_ct.bash(f"test -d {tmp_dest}", check=False) is None:
-            source = resolve_source(parse_source(f"@{cls.DEFAULT_REF}", cls.DEFAULT_SOURCE_URL))
+            source = resolve_source(
+                parse_source(f"@{cls.DEFAULT_REF}", cls.DEFAULT_SOURCE_URL)
+            )
             bld_ct.setup_repo(tmp_dest, out, source)
         else:
             out.print(f"  Fetching {cls.REPO_NAME}-git-main from upstream ...")
