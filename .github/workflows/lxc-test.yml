@@ -40,15 +40,15 @@ jobs:
       - name: Parse cmlxc commands
         id: parse
         shell: bash
+        env:
+          CMLXC_COMMANDS: ${{ inputs.cmlxc_commands }}
         run: |
           i=1
           while IFS= read -r line || [ -n "$line" ]; do
             [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
             echo "cmd${i}=${line}" >> "$GITHUB_OUTPUT"
             i=$((i+1))
-          done <<'EOF'
-          ${{ inputs.cmlxc_commands }}
-          EOF
+          done <<< "$CMLXC_COMMANDS"
           echo "count=$((i-1))" >> "$GITHUB_OUTPUT"
 
   lxc-test:
