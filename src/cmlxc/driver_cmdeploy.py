@@ -200,7 +200,7 @@ def get_ini_overrides(domain, disable_ipv6=False):
         # busy, which a CI runner hosting several containers always
         # does.  Test relays are throwaway, so lift the gates instead
         # of losing accounts to unrelated load.
-        "max_load_per_cpu_1m": 1000,
+        "max_load_1m": 1000,
         "min_available_memory": "1M",
         "min_free_disk_space": "1M",
         "mtail_address": "127.0.0.1",

@@ -52,7 +52,7 @@ def test_validate_relay_name_accepts_valid(good):
 def test_ini_overrides_lift_resource_gates():
     """Loaded CI runners must not make relays refuse new addresses."""
     overrides = get_ini_overrides("cm0.localchat")
-    assert overrides["max_load_per_cpu_1m"] >= 1000
+    assert overrides["max_load_1m"] >= 1000
     assert overrides["min_available_memory"] == "1M"
     assert overrides["min_free_disk_space"] == "1M"
 
