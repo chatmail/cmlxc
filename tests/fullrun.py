@@ -125,6 +125,18 @@ def test_cm_ipv4_test():
 # ---- madmail cycle ---------------------------------------------------------
 
 
+def test_mad_stale_checkout_discarded():
+    ix = Incus(Out())
+    bld_ct = BuilderContainer(ix)
+    tmp_dest = f"/root/{MadmailDriver.REPO_NAME}-git-main"
+    bld_ct.bash(
+        f"rm -rf {tmp_dest} && mkdir -p {tmp_dest}"
+        f" && touch {tmp_dest}/go.mod {tmp_dest}/Makefile"
+    )
+    cmlxc("init")
+    assert bld_ct.bash(f"test -f {tmp_dest}/Cargo.toml", check=False) is not None
+
+
 def test_mad_deploy():
     cmlxc("deploy-madmail", CT_MAD)
 
