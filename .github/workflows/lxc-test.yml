@@ -109,7 +109,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: /tmp/incus-cache
-          key: incus-v5-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/*.py') }}
+          key: incus-v5-debian13-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/*.py') }}
 
       - name: Import cached images
         run: |

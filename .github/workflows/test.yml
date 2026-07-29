@@ -68,9 +68,9 @@ jobs:
       with:
         path: |
           /tmp/incus-cache
-        key: incus-images-v8-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/incus.py') }}
+        key: incus-images-v8-debian13-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/incus.py') }}
         restore-keys: |
-          incus-images-v8-${{ runner.os }}-
+          incus-images-v8-debian13-${{ runner.os }}-
 
     - name: Import cached images
       run: |
