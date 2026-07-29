@@ -1,17 +1,19 @@
 """madmail-based deployment driver for cmlxc.
 
-The maddy binary is built inside the builder container
+The madmail binary is built inside the builder container
 and transferred to relay containers via SCP.
 Madmail relays run on IP addresses
 and do not require DNS entries.
 """
 
+import re
 import time
 
 from cmlxc.container import SetupError
 from cmlxc.driver_base import Driver
 
 MADMAIL = "madmail"
+RELEASED_TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 
 
 class MadmailDriver(Driver):
@@ -21,7 +23,7 @@ class MadmailDriver(Driver):
     CLI_DOC = "Deploy a madmail relay service into a container."
     DEFAULT_SOURCE_URL = "https://github.com/themadorg/madmail.git"
     REPO_NAME = MADMAIL
-    REQUIRED_SOURCE_PATHS = ["go.mod", "Makefile"]
+    REQUIRED_SOURCE_PATHS = ["Cargo.toml", "Makefile"]
     DEFAULT_REF = "latest"
     type = "ipv4"
 
@@ -43,57 +45,75 @@ class MadmailDriver(Driver):
 
     @classmethod
     def on_prep_builder(cls, out, bld_ct, tmp_dest):
-        """Hook called by ``prep_builder`` to ensure the Go toolchain is ready."""
-        out.print("  Ensuring build environment (Go) ...")
+        """Hook called by ``prep_builder`` to ensure the Rust toolchain is ready."""
+        out.print("  Ensuring build environment (Rust) ...")
         prepare_build_container(bld_ct, tmp_dest)
 
-    def on_init_relay(self, repo_path):
-        """Hook called by ``init_builder`` to build the maddy binary."""
+    def on_init_relay(self, repo_path, source):
+        """Hook called by ``init_builder`` to obtain the madmail binary.
+
+        Tries downloading a prebuilt release asset first (only possible for a
+        resolved release tag); falls back to building from source otherwise.
+        """
+        if source.kind == "remote" and RELEASED_TAG_RE.match(source.ref or ""):
+            with self.out.section(
+                f"Fetching madmail {source.ref} release binary for {self.ct.shortname}"
+            ):
+                if self._download_release_binary(repo_path, source.ref):
+                    return
+                self.out.print("  Download failed, falling back to source build ...")
+
+        self._build_from_source(repo_path)
+
+    def _download_release_binary(self, repo_path, ref):
+        """Try to fetch the musl release asset for *ref*. Return True on success."""
+        arch = self.bld_ct.bash("dpkg --print-architecture").strip()
+        if arch not in ("amd64", "arm64"):
+            self.out.print(f"  No release asset for arch {arch!r}")
+            return False
+
+        asset = f"madmail-linux-{arch}-musl"
+        url = f"https://github.com/themadorg/madmail/releases/download/{ref}/{asset}"
+        self.bld_ct.bash(f"mkdir -p {repo_path}/target/release")
+        ret = self.bld_ct.bash(
+            f"curl -fsSL -o {repo_path}/target/release/madmail '{url}'",
+            check=False,
+        )
+        if ret is None:
+            return False
+        self.bld_ct.bash(f"chmod +x {repo_path}/target/release/madmail")
+        self.out.print(f"  Downloaded {asset}")
+        return True
+
+    def _build_from_source(self, repo_path):
         mode = "with admin web UI" if self.with_admin else "without admin web UI"
         with self.out.section(
-            f"Building maddy binary for {self.ct.shortname} ({mode})"
+            f"Building madmail binary for {self.ct.shortname} ({mode})"
         ):
-            if self.with_admin:
-                # Ensure admin-web submodule is populated and dependencies installed;
-                # build.sh copy_admin_web() handles the actual SPA build.
-                self.bld_ct.bash(f"""
-                    if [ ! -f '{repo_path}/admin-web/package.json' ]; then
-                        cd '{repo_path}' && git submodule update --init admin-web
-                    fi
-                    cd '{repo_path}/admin-web'
-                    if command -v bun >/dev/null 2>&1; then
-                        bun install
-                    elif command -v npm >/dev/null 2>&1; then
-                        npm install
-                    fi
-                """)
-            else:
-                # Hide package.json so build.sh creates a placeholder instead.
-                self.bld_ct.bash(f"""
-                    PKG='{repo_path}/admin-web/package.json'
-                    BAK='{repo_path}/admin-web/package.json.cmlxc-disabled'
-                    if [ -f "$PKG" ]; then mv "$PKG" "$BAK"; fi
-                """)
+            self.bld_ct.bash(f"cd '{repo_path}' && make init")
 
-            try:
+            if self.with_admin:
+                # v2's `build-admin-web` Makefile target runs
+                # `git submodule update --init` itself and no separate
+                # submodule/bun-install step is needed
                 ret = self.out.shell(
                     f"incus exec {self.bld_ct.name} -- bash -c "
-                    f"'cd {repo_path} && make clean build'"
+                    f"'cd {repo_path} && make build-release'"
                 )
-            finally:
-                # Restore package.json if we hid it.
-                self.bld_ct.bash(f"""
-                    BAK='{repo_path}/admin-web/package.json.cmlxc-disabled'
-                    PKG='{repo_path}/admin-web/package.json'
-                    if [ -f "$BAK" ] && [ ! -f "$PKG" ]; then mv "$BAK" "$PKG"; fi
-                """)
+            else:
+                # Clear any stale embed
+                self.bld_ct.bash(f"rm -rf {repo_path}/crates/chatmail-admin-web/embed")
+                ret = self.out.shell(
+                    f"incus exec {self.bld_ct.name} -- bash -c "
+                    f"'cd {repo_path} && cargo build -p chatmail --release'"
+                )
 
             if ret:
-                raise SetupError(f"maddy build failed in {repo_path} (exit {ret})")
+                raise SetupError(f"madmail build failed in {repo_path} (exit {ret})")
 
             if self.with_admin:
                 check = self.bld_ct.bash(
-                    f"test -f {repo_path}/internal/adminweb/build/index.html",
+                    f"test -f {repo_path}/crates/chatmail-admin-web/embed/index.html",
                     check=False,
                 )
                 if check is None:
@@ -104,11 +124,12 @@ class MadmailDriver(Driver):
         test_src = f"{self.get_git_main_path()}/tests/deltachat-test"
 
         with self.out.section("test-madmail"):
-            # Symlink the built maddy binary into the test directory so
+            # Symlink the built madmail binary into the test directory so
             # tests that spawn a local server can find it at build/maddy.
             self.bld_ct.bash(
                 f"mkdir -p {test_src}/build"
-                f" && ln -sf {self.repo_path}/build/maddy {test_src}/build/maddy"
+                f" && ln -sf {self.repo_path}/target/release/madmail"
+                f" {test_src}/build/maddy"
             )
 
             relay1 = self.get_test_domain_or_ip()
@@ -172,17 +193,15 @@ class MadmailDriver(Driver):
             self.out.print("Pushing madmail binary via SCP ...")
             self.ct.bash("rm -f /tmp/madmail")
             self.bld_ct.scp_to_relay(
-                f"{self.repo_path}/build/maddy",
+                f"{self.repo_path}/target/release/madmail",
                 ip,
                 "/tmp/madmail",
             )
             self.ct.bash("chmod +x /tmp/madmail")
 
             install_flags = (
-                f"--simple --ip {ip}"
-                " --tls-mode self_signed"
-                " --enable-chatmail"
-                " --non-interactive"
+                f"--simple --ip {ip} --tls-mode self_signed"
+                " --enable-chatmail --enable-iroh --non-interactive"
             )
             self.out.print(f"Running madmail install {install_flags} ...")
             self.ct.bash("systemctl stop madmail || true")
@@ -247,8 +266,8 @@ def _parse_admin_web_status(status):
     return enabled, path
 
 
-def prepare_build_container(bld_ct, go_mod_path):
-    """Install or update Go inside the builder according to go.mod."""
+def prepare_build_container(bld_ct, cargo_toml_path):
+    """Install or update Rust inside the builder according to Cargo.toml."""
     bld_ct.bash("""
         if ! command -v node >/dev/null 2>&1 || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 22 ]; then
             apt-get -o DPkg::Lock::Timeout=60 update
@@ -262,21 +281,24 @@ def prepare_build_container(bld_ct, go_mod_path):
             ln -sf /root/.bun/bin/bun /usr/local/bin/bun
         fi
     """)
-    bld_ct.bash(f"""
-        NEED=$(awk '/^go / {{print $2}}' {go_mod_path}/go.mod)
-        ARCH=$(dpkg --print-architecture)
-        case "$ARCH" in
-            amd64) GOARCH=amd64 ;;
-            arm64) GOARCH=arm64 ;;
-            *) echo "unsupported arch: $ARCH" >&2; exit 1 ;;
-        esac
-        if [ -x /usr/local/go/bin/go ]; then
-            HAVE=$(/usr/local/go/bin/go version | awk '{{print $3}}' | sed 's/^go//')
-            [ "$HAVE" = "$NEED" ] && exit 0
+    bld_ct.bash("""
+        if ! command -v rustc >/dev/null 2>&1; then
+            apt-get -o DPkg::Lock::Timeout=60 update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl build-essential
+            apt-get clean && rm -rf /var/lib/apt/lists/*
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \\
+                | bash -s -- -y --default-toolchain stable --profile minimal
         fi
-        URL="https://go.dev/dl/go${{NEED}}.linux-${{GOARCH}}.tar.gz"
-        echo "Installing Go ${{NEED}} from ${{URL}} ..."
-        curl -fsSL "$URL" | tar -C /usr/local -xzf -
-        ln -sf /usr/local/go/bin/go /usr/local/bin/go
-        ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+        ln -sf /root/.cargo/bin/cargo /usr/local/bin/cargo
+        ln -sf /root/.cargo/bin/rustc /usr/local/bin/rustc
+        ln -sf /root/.cargo/bin/rustup /usr/local/bin/rustup
+    """)
+    bld_ct.bash(f"""
+        NEED=$(awk -F'"' '/^rust-version/ {{print $2}}' {cargo_toml_path}/Cargo.toml)
+        HAVE=$(rustc --version | awk '{{print $2}}')
+        OLDEST=$(printf '%s\\n%s\\n' "$HAVE" "$NEED" | sort -V | head -n1)
+        if [ "$OLDEST" = "$HAVE" ] && [ "$HAVE" != "$NEED" ]; then
+            echo "Updating Rust: $HAVE < required $NEED ..."
+            rustup update stable
+        fi
     """)

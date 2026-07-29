@@ -60,7 +60,7 @@ class CmdeployDriver(Driver):
             case _:
                 return self.ct.domain
 
-    def on_init_relay(self, repo_path):
+    def on_init_relay(self, repo_path, source):
         """Hook called by ``init_builder`` to run initenv.sh for the relay."""
         self.out.print(f"  Running scripts/initenv.sh for {self.ct.shortname} ...")
         self.bld_ct.bash(f"cd {repo_path} && bash scripts/initenv.sh")
