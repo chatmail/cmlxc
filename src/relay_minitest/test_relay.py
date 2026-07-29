@@ -1,10 +1,10 @@
+import email
 import imaplib
 import ipaddress
 import smtplib
 import ssl
 from email.mime.text import MIMEText
 
-import imap_tools
 import pytest
 import requests
 
@@ -75,8 +75,11 @@ class TestMultiRelay:
         relayadmin2.block_port(443)
         relayadmin2.block_port(80)
         chat.send_text("should not arrive")
-        # Postfix logs "status=deferred", madmail logs "delivery attempt failed".
-        lines = relayadmin.wait_for_journal_match("deferred|delivery attempt failed")
+        # Postfix logs "status=deferred"; madmail logs one of three phrasings
+        # depending on retry state (see chatmail-delivery/src/queue/worker.rs).
+        lines = relayadmin.wait_for_journal_match(
+            "deferred|outbound delivery (failed, requeued|permanent failure|exceeded max_tries)"
+        )
         lp.indent(lines.splitlines()[-1])
 
     def test_one_on_one_http_only(self, cmfactory, cmfactory2, relayadmin2, lp):
@@ -115,11 +118,19 @@ def test_hide_senders_ip_address(cmfactory, ssl_context):
     addr = user2.get_config("addr")
     host = addr.split("@")[1].strip("[]")
     pw = user2.get_config("mail_pw")
-    mailbox = imap_tools.MailBox(host, ssl_context=ssl_context)
-    mailbox.login(addr, pw)
-    msgs = list(mailbox.fetch(mark_seen=False))
-    assert msgs, "expected at least one message"
-    assert public_ip not in msgs[0].obj.as_string()
+
+    # madmail's IMAP server doesn't implement SEARCH/UID SEARCH (only FETCH,
+    # UID FETCH/STORE/MOVE/COPY, see chatmail-imap/src/session.rs), so
+    # fetch by sequence range instead.
+    imap = imaplib.IMAP4_SSL(host, ssl_context=ssl_context)
+    imap.login(addr, pw)
+    imap.select("INBOX")
+    typ, data = imap.fetch("1:*", "(BODY.PEEK[])")
+    assert typ == "OK"
+    raw_messages = [item[1] for item in data if isinstance(item, tuple)]
+    assert raw_messages, "expected at least one message"
+    msg = email.message_from_bytes(raw_messages[-1])
+    assert public_ip not in msg.as_string()
 
 
 def test_unencrypted_rejection(cmsetup, lp):
