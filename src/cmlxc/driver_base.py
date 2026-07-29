@@ -192,13 +192,27 @@ class Driver:
         """Hook called by ``prep_builder`` after the git-main checkout is ready."""
         pass
 
-    def on_init_relay(self, repo_path):
+    def on_init_relay(self, repo_path, tag):
         """Hook called by ``init_builder`` after a relay checkout is ready."""
         pass
 
-    def get_git_main_path(self):
-        """Return path to the persistent git-main checkout on the builder."""
-        return f"/root/{self.REPO_NAME}-git-main"
+    @classmethod
+    def get_git_main_path(cls, bld_ct, out):
+        """Return (path, exists) for the git-main checkout, discarding it if stale."""
+        path = f"/root/{cls.REPO_NAME}-git-main"
+        exists = bld_ct.bash(f"test -d {path}", check=False) is not None
+        if exists and cls.cached_checkout_is_stale(bld_ct, path):
+            out.print(f"  Discarding stale {cls.REPO_NAME}-git-main checkout ...")
+            bld_ct.bash(f"rm -rf {path}")
+            exists = False
+        return path, exists
+
+    @classmethod
+    def cached_checkout_is_stale(cls, bld_ct, path):
+        if not cls.REQUIRED_SOURCE_PATHS:
+            return False
+        checks = " && ".join(f"test -e {path}/{p}" for p in cls.REQUIRED_SOURCE_PATHS)
+        return bld_ct.bash(checks, check=False) is None
 
     @classmethod
     def prep_builder(cls, ix, out, bld_ct):
@@ -219,8 +233,8 @@ class Driver:
             check=False,
         )
 
-        tmp_dest = f"/root/{cls.REPO_NAME}-git-main"
-        if bld_ct.bash(f"test -d {tmp_dest}", check=False) is None:
+        tmp_dest, exists = cls.get_git_main_path(bld_ct, out)
+        if not exists:
             source = parse_source(f"@{cls.DEFAULT_REF}", cls.DEFAULT_SOURCE_URL)
             bld_ct.setup_repo(tmp_dest, out, source)
         else:
@@ -233,7 +247,7 @@ class Driver:
     def init_builder(self, source):
         """Hook called by ``deploy-*`` to prepare a relay checkout and build."""
         self.prep_builder(self.ix, self.out, self.bld_ct)
-        tmp_dest = self.get_git_main_path()
+        tmp_dest, _ = self.get_git_main_path(self.bld_ct, self.out)
         repo_path = self.repo_path
 
         if source.kind == "remote":
@@ -260,7 +274,8 @@ class Driver:
             self.bld_ct.sync_to(source.path, repo_path)
 
         # Relay-specific preparation (e.g. build binary, init venv)
-        self.on_init_relay(repo_path)
+        tag = source.ref if source.kind == "remote" else None
+        self.on_init_relay(repo_path, tag)
 
     def run_deploy(self, *, source, ipv4_only):
         """Perform the driver-specific deployment.
