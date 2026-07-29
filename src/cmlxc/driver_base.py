@@ -5,7 +5,8 @@ builder setup, and deploy orchestration hooks.
 """
 
 import re
-from dataclasses import dataclass
+import subprocess
+from dataclasses import dataclass, replace
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Literal
@@ -20,6 +21,7 @@ from cmlxc.container import (
     DNS_CONTAINER_NAME,
     BuilderContainer,
     DNSContainer,
+    SetupError,
 )
 from cmlxc.incus import Incus
 
@@ -46,6 +48,7 @@ def parse_source(value: str, default_url: str) -> SourceSpec:
 
     Accepted forms:
       @ref           -- branch/tag on the default remote
+      @latest        -- newest released tag on the default remote
       /path or ./path -- local directory
       URL@ref        -- custom remote at a given ref
     """
@@ -62,6 +65,35 @@ def parse_source(value: str, default_url: str) -> SourceSpec:
     if "/" in value:
         return SourceSpec("remote", url=default_url, ref=value)
     raise ValueError(f"Invalid SOURCE: {value!r}. Use @ref, /path, ./path, or URL@ref.")
+
+
+def get_latest_tag(url: str) -> str:
+    """Return the newest release tag on url via git ls-remote."""
+    try:
+        result = subprocess.run(
+            # version-sort tags (newest first)
+            ["git", "ls-remote", "--tags", "--refs", "--sort=-v:refname", url],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+    except (subprocess.SubprocessError, OSError) as e:
+        raise SetupError(f"Failed to resolve @latest for {url}: {e}")
+
+    # Lines are "<sha>\trefs/tags/<tag>", newest first. Extract first match of X.Y.Z, 
+    # optional leading "v", tags, skips pre-release (X.Y.Z-rc1) and non-semver tags.
+    tags = re.findall(r"\trefs/tags/(v?\d+\.\d+\.\d+)$", result.stdout, re.M)
+    if tags:
+        return tags[0]
+    raise SetupError(f"No tags found at {url} to resolve @latest")
+
+
+def resolve_source(source: SourceSpec) -> SourceSpec:
+    """Resolve a ref="latest" remote spec to a concrete tag; pass others through."""
+    if source.kind == "remote" and source.ref == "latest":
+        return replace(source, ref=get_latest_tag(source.url))
+    return source
 
 
 _RELAY_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
@@ -146,7 +178,10 @@ class Driver:
             "--source",
             default=f"@{cls.DEFAULT_REF}",
             metavar="SOURCE",
-            help=f"Driver source: @ref, /path, ./path, or URL@ref (default: @{cls.DEFAULT_REF}).",
+            help=(
+                "Driver source: @ref (branch, tag), @latest (release tag), /path, ./path,"
+                f" or URL@ref (default: @{cls.DEFAULT_REF})."
+            ),
         )
         action = parser.add_argument(
             "name",
@@ -202,7 +237,10 @@ class Driver:
 
     @classmethod
     def prep_builder(cls, ix, out, bld_ct):
-        """Hook called by ``cmlxc init`` to prepare toolchains and main checkout."""
+        """Prepare builder toolchains and the persistent ``-git-main`` cache clone.
+
+        Called by ``cmlxc init`` and, via ``init_builder``, by every deploy.
+        """
         # Trust all repo paths inside the builder (ownership differs from host).
         bld_ct.bash("mkdir -p /root/relays")
         bld_ct.bash("git config --global --add safe.directory '*'", check=False)
@@ -221,7 +259,7 @@ class Driver:
 
         tmp_dest = f"/root/{cls.REPO_NAME}-git-main"
         if bld_ct.bash(f"test -d {tmp_dest}", check=False) is None:
-            source = parse_source(f"@{cls.DEFAULT_REF}", cls.DEFAULT_SOURCE_URL)
+            source = resolve_source(parse_source(f"@{cls.DEFAULT_REF}", cls.DEFAULT_SOURCE_URL))
             bld_ct.setup_repo(tmp_dest, out, source)
         else:
             out.print(f"  Fetching {cls.REPO_NAME}-git-main from upstream ...")
@@ -312,6 +350,7 @@ class Driver:
 
             out.print(f"cmlxc {__version__}")
             with out.section(f"Preparing {cls.CLI_NAME} source in builder"):
+                source = resolve_source(source)
                 out.print(f"  Source: {source.description}")
                 driver.init_builder(source=source)
 
