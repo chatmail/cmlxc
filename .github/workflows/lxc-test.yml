@@ -1,8 +1,5 @@
 name: LXC deploy and test
 
-permissions:
-  contents: read
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-lxc
   cancel-in-progress: false
@@ -64,6 +61,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: repo
+          persist-credentials: false
 
       - name: Checkout cmlxc
         uses: actions/checkout@v7
@@ -72,6 +70,7 @@ jobs:
           ref: ${{ inputs.cmlxc_version }}
           path: cmlxc
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install Incus (Zabbly)
         run: |
