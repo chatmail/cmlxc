@@ -23,6 +23,32 @@ def verify_dual_stack_zone(ct, zone_content):
         raise SetupError(f"{ct.shortname}: dual-stack relay, zone has no AAAA")
 
 
+def run_test_cmdeploy(driver, test_addr, second_domain=None):
+    """Run the cmdeploy pytest suite via incus exec on the builder.
+
+    Shared by CmdeployDriver and DockerDriver, test_addr is the address
+    already resolved by the caller.
+    """
+    env = {"CHATMAIL_INI": f"{driver.repo_path}/chatmail.ini"}
+    if second_domain:
+        env["CHATMAIL_DOMAIN2"] = second_domain
+
+    driver.out.print(f"Running cmdeploy tests against {test_addr} ...")
+
+    env_args = "".join(f" --env {k}={v}" for k, v in env.items())
+    cmd = (
+        f"incus exec {driver.bld_ct.name}{env_args} --"
+        f" bash -c '"
+        f" source {driver.venv_path}/bin/activate &&"
+        f" cd {driver.repo_path} &&"
+        f" pytest cmdeploy/src/ -n4 -rs -x -v --durations=5'"
+    )
+    ret = driver.out.shell(cmd)
+    if ret:
+        driver.out.red(f"test-cmdeploy failed (exit {ret})")
+    return ret
+
+
 class CmdeployDriver(Driver):
     """Deploys chatmail relays via the ``cmdeploy`` tool."""
 
@@ -102,26 +128,7 @@ class CmdeployDriver(Driver):
             write_ini(
                 self.bld_ct, self.ct, domain, disable_ipv6=self.ct.is_ipv6_disabled
             )
-
-            ini_path = f"{self.repo_path}/chatmail.ini"
-            env = {"CHATMAIL_INI": ini_path}
-            if second_domain:
-                env["CHATMAIL_DOMAIN2"] = second_domain
-
-            self.out.print(f"Running cmdeploy tests against {domain} ...")
-
-            env_args = "".join(f" --env {k}={v}" for k, v in env.items())
-            cmd = (
-                f"incus exec {self.bld_ct.name}{env_args} --"
-                f" bash -c '"
-                f" source {self.venv_path}/bin/activate &&"
-                f" cd {self.repo_path} &&"
-                f" pytest cmdeploy/src/ -n4 -rs -x -v --durations=5'"
-            )
-            ret = self.out.shell(cmd)
-            if ret:
-                self.out.red(f"test-cmdeploy failed (exit {ret})")
-            return ret
+            return run_test_cmdeploy(self, domain, second_domain)
 
     def deploy(self, source=None):
         """Deploy chatmail services to a single relay via cmdeploy."""
