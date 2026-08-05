@@ -31,9 +31,9 @@ class CmdeployDriver(Driver):
         parser.add_argument(
             "--type",
             dest="type",
-            choices=["dns", "ipv4", "ipv6"],
+            choices=["dns", "ipv4"],
             default="dns",
-            help="Deploy the relay using dns (default), ipv4, or ipv6.",
+            help="Deploy the relay using dns (default) or a bare ipv4 literal.",
         )
         parser.add_argument(
             "--filtermail",
@@ -51,10 +51,6 @@ class CmdeployDriver(Driver):
         if not self.ct.ipv4:
             self.ct.wait_ready()
         match self.type:
-            case "ipv6":
-                if not self.ct.ipv6:
-                    raise SetupError(f"{self.ct.name} has no IPv6 address.")
-                return self.ct.ipv6
             case "ipv4":
                 return self.ct.ipv4
             case _:
