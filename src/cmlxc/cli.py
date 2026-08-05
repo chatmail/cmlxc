@@ -683,7 +683,8 @@ def main(args=None):
         if res is None:
             res = 0
         return res
-    except SetupError as exc:
+    except (SetupError, ValueError) as exc:
+        # ValueError is the bad-user-input signal
         out.red(str(exc))
         return 1
     except KeyboardInterrupt:
