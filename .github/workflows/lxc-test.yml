@@ -215,6 +215,11 @@ jobs:
           for ct in $(incus list -c n --format csv | grep -v builder); do
             if incus exec "$ct" -- docker info >/dev/null 2>&1; then
               echo "Stripping Docker images and deploy state from $ct ..."
+              # prune leaves RUNNING containers alone, and the relay has
+              # restart: unless-stopped, so remove them or the image carries
+              # a container that respawns on the next run.
+              incus exec "$ct" -- bash -c \
+                'docker ps -aq | xargs -r docker rm -f' 2>/dev/null || true
               incus exec "$ct" -- docker system prune -af --volumes 2>/dev/null || true
               # Everything below is per-deploy state.
               incus exec "$ct" -- rm -rf /opt/chatmail-docker /srv/chatmail \
