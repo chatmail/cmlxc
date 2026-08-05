@@ -47,6 +47,24 @@ def test_parse_source_rejects_invalid(value):
 
 
 @pytest.mark.parametrize(
+    "value",
+    [
+        "@main; rm -rf /",
+        "@$(id)",
+        "@`id`",
+        "@main whoami",
+        "@main'",
+        "@",
+        "https://github.com/fork/relay.git@main;id",
+    ],
+)
+def test_parse_source_rejects_unsafe_ref(value):
+    # refs reach `git checkout` inside `bash -ec` on the builder
+    with pytest.raises(ValueError, match="Invalid ref"):
+        parse_source(value, URL)
+
+
+@pytest.mark.parametrize(
     "ref, expected",
     [
         ("a" * 40, True),

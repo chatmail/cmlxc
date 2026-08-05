@@ -40,6 +40,21 @@ class SourceSpec:
         return f"ref {self.ref!r} from {self.url}"
 
 
+# A ref is interpolated into `git fetch` / `git checkout` inside `bash -ec`
+# on the builder, so restrict it to characters git actually allows in a ref
+_REF_RE = re.compile(r"[\w./@+-]+")
+
+
+def _remote_spec(url, ref):
+    """Build a remote SourceSpec after validating *ref*."""
+    if not _REF_RE.fullmatch(ref or ""):
+        raise ValueError(
+            f"Invalid ref {ref!r}."
+            " Refs may contain letters, digits, and any of . / @ + - _"
+        )
+    return SourceSpec("remote", url=url, ref=ref)
+
+
 def parse_source(value: str, default_url: str) -> SourceSpec:
     """Turn a SOURCE string into a typed spec.
 
@@ -52,15 +67,15 @@ def parse_source(value: str, default_url: str) -> SourceSpec:
     if value.startswith(("/", ".")):
         return SourceSpec("local", path=Path(value))
     if value.startswith("@"):
-        return SourceSpec("remote", url=default_url, ref=value[1:])
+        return _remote_spec(default_url, value[1:])
     if "://" in value:
         if "@" in value:
             url, _, ref = value.rpartition("@")
             if url:
-                return SourceSpec("remote", url=url, ref=ref)
+                return _remote_spec(url, ref)
         return SourceSpec("remote", url=value, ref="main")
     if "/" in value:
-        return SourceSpec("remote", url=default_url, ref=value)
+        return _remote_spec(default_url, value)
     raise ValueError(f"Invalid SOURCE: {value!r}. Use @ref, /path, ./path, or URL@ref.")
 
 
