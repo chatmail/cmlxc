@@ -114,7 +114,7 @@ jobs:
       - name: Import cached images
         run: |
           mkdir -p /tmp/incus-cache
-          for alias in localchat-base localchat-builder; do
+          for alias in localchat-base localchat-builder localchat-docker; do
             if [ -f /tmp/incus-cache/$alias.tar.gz ]; then
               echo "Importing: $alias"
               incus image import /tmp/incus-cache/$alias.tar.gz --alias $alias || true
@@ -191,7 +191,13 @@ jobs:
         run: |
           for c in $(incus list -c n --format csv); do
             echo "::group::Logs for $c"
-            incus exec "$c" -- journalctl -p warning --no-pager -n 100 || true
+            # Exits 1 on relays that are not Docker deployments.
+            if cmlxc docker logs "$c" --diagnostics; then
+              # dockerd and containerd log at info, so drop the severity filter.
+              incus exec "$c" -- journalctl --no-pager -n 200 || true
+            else
+              incus exec "$c" -- journalctl -p warning --no-pager -n 100 || true
+            fi
             echo "::endgroup::"
           done
 
@@ -205,8 +211,21 @@ jobs:
             echo "Publishing builder container as image ..."
             incus publish builder-localchat --alias localchat-builder --force || true
           fi
+          # Publish Docker relay container with engine only (strip images)
+          for ct in $(incus list -c n --format csv | grep -v builder); do
+            if incus exec "$ct" -- docker info >/dev/null 2>&1; then
+              echo "Stripping Docker images and deploy state from $ct ..."
+              incus exec "$ct" -- docker system prune -af --volumes 2>/dev/null || true
+              # Everything below is per-deploy state.
+              incus exec "$ct" -- rm -rf /opt/chatmail-docker /srv/chatmail \
+                /root/.ssh/authorized_keys /etc/resolv.conf 2>/dev/null || true
+              echo "Publishing $ct as localchat-docker ..."
+              incus publish "$ct" --alias localchat-docker --force || true
+              break
+            fi
+          done
           exported=0
-          for alias in localchat-base localchat-builder; do
+          for alias in localchat-base localchat-builder localchat-docker; do
             if incus image list --format csv -c l | grep -q "^$alias$"; then
               echo "Exporting: $alias"
               incus image export $alias /tmp/incus-cache/$alias || true
