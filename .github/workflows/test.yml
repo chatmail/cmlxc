@@ -69,9 +69,7 @@ jobs:
       with:
         path: |
           /tmp/incus-cache
-        key: incus-images-v8-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/incus.py') }}
-        restore-keys: |
-          incus-images-v8-${{ runner.os }}-
+        key: incus-images-v9-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/*.py', 'cmlxc/.github/workflows/test.yml') }}
 
     - name: Import cached images
       run: |
