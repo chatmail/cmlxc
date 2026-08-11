@@ -176,6 +176,7 @@ def start_cmd(args, out):
             return 1
         out.green(f"Starting container {ct.name!r} ...")
         ct.start()
+        ct.wait_ready()
     ix.write_ssh_config()
     out.green("LXC containers started.")
 
