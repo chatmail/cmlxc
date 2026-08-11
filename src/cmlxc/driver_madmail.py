@@ -130,7 +130,7 @@ class MadmailDriver(Driver):
 
     def run_tests(self, second_domain=None, cool=False, simple=False):
         """Execute the madmail E2E test suite against relays."""
-        test_src = f"{self.get_git_main_path()}/tests/deltachat-test"
+        test_src = f"{self.repo_path}/tests/deltachat-test"
 
         with self.out.section("test-madmail"):
             # Symlink the built madmail binary into the test directory so
