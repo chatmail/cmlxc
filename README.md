@@ -94,6 +94,7 @@ builder (wipe-and-reclone).
     cmlxc status cm0 mad1       # show multiple containers
     cmlxc status --host         # show DNS/SSH setup instructions
     cmlxc start cm0             # restart a stopped relay
+    cmlxc dist-upgrade cm0      # in-place Debian upgrade and redeploy
     cmlxc stop cm0 cm1          # stop relays
     cmlxc destroy cm0           # stop + delete
     cmlxc destroy --all         # destroy relays, keep DNS/builder
