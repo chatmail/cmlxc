@@ -14,6 +14,15 @@ from cmlxc.driver_base import Driver
 
 MADMAIL = "madmail"
 RELEASED_TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
+RELEASE_ARCHES = ("amd64", "arm64")
+
+
+def release_asset_url(tag, arch):
+    """Return the musl release asset URL, or None if tag/arch has no asset."""
+    if not RELEASED_TAG_RE.match(tag or "") or arch not in RELEASE_ARCHES:
+        return None
+    asset = f"madmail-linux-{arch}-musl"
+    return f"https://github.com/themadorg/madmail/releases/download/{tag}/{asset}"
 
 
 class MadmailDriver(Driver):
@@ -49,31 +58,31 @@ class MadmailDriver(Driver):
         out.print("  Ensuring build environment (Rust) ...")
         prepare_build_container(bld_ct, tmp_dest)
 
-    def on_init_relay(self, repo_path, source):
-        """Hook called by ``init_builder`` to obtain the madmail binary.
+    def on_init_relay(self, repo_path):
+        """Download the release binary if HEAD is a tagged release, else build.
 
-        Tries downloading a prebuilt release asset first (only possible for a
-        resolved release tag); falls back to building from source otherwise.
+        Probes the checked-out commit rather than the requested ref, so
+        ``--source @main`` also hits the download whenever main happens to sit
+        on a tag, which madmail's semantic-release makes the common case.
         """
-        if source.kind == "remote" and RELEASED_TAG_RE.match(source.ref or ""):
+        tag = self.bld_ct.bash(
+            f"cd {repo_path} && git describe --tags --exact-match --dirty",
+            check=False,
+        )
+        arch = self.bld_ct.bash("dpkg --print-architecture")
+        url = release_asset_url(tag, arch)
+        if url:
             with self.out.section(
-                f"Fetching madmail {source.ref} release binary for {self.ct.shortname}"
+                f"Fetching madmail {tag} release binary for {self.ct.shortname}"
             ):
-                if self._download_release_binary(repo_path, source.ref):
+                if self._download_release_binary(repo_path, url):
                     return
                 self.out.print("  Download failed, falling back to source build ...")
 
         self._build_from_source(repo_path)
 
-    def _download_release_binary(self, repo_path, ref):
-        """Try to fetch the musl release asset for *ref*. Return True on success."""
-        arch = self.bld_ct.bash("dpkg --print-architecture").strip()
-        if arch not in ("amd64", "arm64"):
-            self.out.print(f"  No release asset for arch {arch!r}")
-            return False
-
-        asset = f"madmail-linux-{arch}-musl"
-        url = f"https://github.com/themadorg/madmail/releases/download/{ref}/{asset}"
+    def _download_release_binary(self, repo_path, url):
+        """Try to fetch the musl release asset at *url*. Return True on success."""
         self.bld_ct.bash(f"mkdir -p {repo_path}/target/release")
         ret = self.bld_ct.bash(
             f"curl -fsSL -o {repo_path}/target/release/madmail '{url}'",
@@ -82,7 +91,7 @@ class MadmailDriver(Driver):
         if ret is None:
             return False
         self.bld_ct.bash(f"chmod +x {repo_path}/target/release/madmail")
-        self.out.print(f"  Downloaded {asset}")
+        self.out.print(f"  Downloaded {url.rsplit('/', 1)[-1]}")
         return True
 
     def _build_from_source(self, repo_path):
@@ -223,6 +232,7 @@ class MadmailDriver(Driver):
                 # Path changes are applied at startup.
                 self.ct.bash("systemctl restart madmail")
             else:
+                # Release binaries always embed admin-web; only disable it here.
                 self.out.print("Disabling admin web interface ...")
                 self.ct.bash("madmail admin-web disable")
 

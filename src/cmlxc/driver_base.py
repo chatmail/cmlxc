@@ -210,7 +210,7 @@ class Driver:
         """Hook called by ``prep_builder`` after the git-main checkout is ready."""
         pass
 
-    def on_init_relay(self, repo_path, source):
+    def on_init_relay(self, repo_path):
         """Hook called by ``init_builder`` after a relay checkout is ready."""
         pass
 
@@ -290,7 +290,7 @@ class Driver:
             self.bld_ct.sync_to(source.path, repo_path)
 
         # Relay-specific preparation (e.g. build binary, init venv)
-        self.on_init_relay(repo_path, source)
+        self.on_init_relay(repo_path)
 
     def run_deploy(self, *, source, ipv4_only):
         """Perform the driver-specific deployment.

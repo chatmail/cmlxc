@@ -11,6 +11,7 @@ from cmlxc.driver_base import (
     validate_relay_name,
 )
 from cmlxc.driver_cmdeploy import get_ini_overrides
+from cmlxc.driver_madmail import release_asset_url
 
 URL = "https://github.com/chatmail/relay.git"
 
@@ -85,3 +86,24 @@ def test_ini_overrides_disable_ipv6():
 )
 def test_latest_release_tag(tag_output, expected):
     assert latest_release_tag(tag_output) == expected
+
+
+@pytest.mark.parametrize(
+    "tag, arch, expected_asset",
+    [
+        ("v2.23.0", "amd64", "madmail-linux-amd64-musl"),
+        ("v2.23.0", "arm64", "madmail-linux-arm64-musl"),
+        # not an exact release commit -> build from source
+        ("v2.23.0-dirty", "amd64", None),
+        ("v2.23.0-4-gabc1234", "amd64", None),
+        (None, "amd64", None),
+        ("", "amd64", None),
+        ("v2.23.0", "riscv64", None),
+    ],
+)
+def test_release_asset_url(tag, arch, expected_asset):
+    url = release_asset_url(tag, arch)
+    if expected_asset is None:
+        assert url is None
+    else:
+        assert url.endswith(f"/v2.23.0/{expected_asset}")
