@@ -265,7 +265,14 @@ def test_cmdeploy_cmd(args, out):
     """Run cmdeploy integration tests inside the builder container."""
     ix = Incus(out)
     ct = ix.get_running_relay(args.relay)
-    driver = CmdeployDriver(ct, out)
+    drv_cls = DRIVER_BY_NAME.get(ct.driver_name)
+    if drv_cls is None:
+        out.red(
+            f"Warning: unknown driver {ct.driver_name!r} for"
+            f" {ct.shortname}, falling back to cmdeploy."
+        )
+        drv_cls = CmdeployDriver
+    driver = drv_cls(ct, out)
     if not driver.check_init():
         return 1
 

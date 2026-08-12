@@ -203,8 +203,14 @@ class Driver:
         pass
 
     def on_init_relay(self, repo_path, tag):
-        """Hook called by ``init_builder`` after a relay checkout is ready."""
-        pass
+        """Hook called by ``init_builder`` after a relay checkout is ready.
+
+        Defaults to running scripts/initenv.sh, which cmdeploy-based drivers
+        need. Override without calling super for a driver that builds
+        the repo differently.
+        """
+        self.out.print(f"  Running scripts/initenv.sh for {self.ct.shortname} ...")
+        self.bld_ct.bash(f"cd {repo_path} && bash scripts/initenv.sh")
 
     @classmethod
     def get_git_main_path(cls, bld_ct, out):
