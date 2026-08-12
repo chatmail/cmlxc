@@ -1,4 +1,31 @@
 
+## [0.17.0] - 2026-08-12
+
+### CI
+
+- stop pinning incus to 7.2, which no longer exists upstream.
+- make incus image cache keys invalidate on real changes.
+- run PR checks regardless of the base branch.
+
+### Features / Changes
+
+- some hardening and adapt to new workflows/chatmail policy.
+
+### Fixes
+
+- overwrite system-limits in cmlxc deploys.
+- revert read-restriction that broke callers, but make sure git-credentials don't leak to them.
+- max_load override name.
+
+### Miscellaneous Tasks
+
+- standardize on uv (chatmail/workflows tooling).
+
+### Other
+
+- Update .gitignore
+
+
 ## [0.16.0] - 2026-07-27
 
 ### Features / Changes
