@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from cmlxc.driver_base import SourceSpec, parse_source, validate_relay_name
+from cmlxc.driver_base import (
+    SourceSpec,
+    latest_release_tag,
+    parse_source,
+    validate_relay_name,
+)
 from cmlxc.driver_cmdeploy import get_ini_overrides
 
 URL = "https://github.com/chatmail/relay.git"
@@ -16,6 +21,7 @@ URL = "https://github.com/chatmail/relay.git"
         ("@main", SourceSpec("remote", url=URL, ref="main")),
         ("@fix-dovecot", SourceSpec("remote", url=URL, ref="fix-dovecot")),
         ("@v2.1", SourceSpec("remote", url=URL, ref="v2.1")),
+        ("@latest", SourceSpec("remote", url=URL, ref="latest")),
         ("/home/me/relay", SourceSpec("local", path=Path("/home/me/relay"))),
         ("./relay", SourceSpec("local", path=Path("./relay"))),
         ("../relay", SourceSpec("local", path=Path("../relay"))),
@@ -61,3 +67,21 @@ def test_ini_overrides_disable_ipv6():
     assert "disable_ipv6" not in get_ini_overrides("cm0.localchat")
     overrides = get_ini_overrides("cm0.localchat", disable_ipv6=True)
     assert overrides["disable_ipv6"] == "True"
+
+
+@pytest.mark.parametrize(
+    "tag_output, expected",
+    [
+        # `git tag -l --sort=-v:refname` output, newest first
+        ("v2.23.0\nv2.22.1\nv2.2.2\n", "v2.23.0"),
+        # pre-releases and non-semver tags are skipped
+        ("v2.24.0-rc1\nv2.23.0\n", "v2.23.0"),
+        ("test\nlatest\nv1.0.0\n", "v1.0.0"),
+        # tags without the v prefix still count
+        ("2.23.0\n", "2.23.0"),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_latest_release_tag(tag_output, expected):
+    assert latest_release_tag(tag_output) == expected
