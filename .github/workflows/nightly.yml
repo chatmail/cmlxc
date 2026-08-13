@@ -35,3 +35,17 @@ jobs:
         cmlxc test-mini fulltest-mad0 fulltest-ip0
         cmlxc test-mini fulltest-ip0 fulltest0
         cmlxc test-mini fulltest0 fulltest-ip0
+
+  # Simulate in-place Debian 12 -> 13 dist-upgrade, separate parallel job;
+  # use @main once relay#1002 merges.
+  upgrade:
+    uses: ./.github/workflows/lxc-test.yml
+    with:
+      cmlxc_version: ${{ github.sha }}
+      cmlxc_commands: |
+        cmlxc init
+        cmlxc deploy-cmdeploy --source @j4n/dovecot-multidist upgrade0
+        cmlxc dist-upgrade upgrade0
+        cmlxc deploy-cmdeploy --source @j4n/dovecot-multidist upgrade0
+        cmlxc stop upgrade0 && cmlxc start upgrade0
+        cmlxc test-cmdeploy upgrade0

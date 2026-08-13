@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from cmlxc.cli import get_parser, upgrade_cmd
 from cmlxc.driver_base import SourceSpec, parse_source, validate_relay_name
 from cmlxc.driver_cmdeploy import get_ini_overrides
 
@@ -61,3 +62,9 @@ def test_ini_overrides_disable_ipv6():
     assert "disable_ipv6" not in get_ini_overrides("cm0.localchat")
     overrides = get_ini_overrides("cm0.localchat", disable_ipv6=True)
     assert overrides["disable_ipv6"] == "True"
+
+
+def test_upgrade_parses_multiple_names():
+    args = get_parser().parse_args(["dist-upgrade", "cm0", "cm1"])
+    assert args.func is upgrade_cmd
+    assert args.names == ["cm0", "cm1"]

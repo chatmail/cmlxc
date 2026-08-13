@@ -176,8 +176,39 @@ def start_cmd(args, out):
             return 1
         out.green(f"Starting container {ct.name!r} ...")
         ct.start()
+        ct.wait_ready()
     ix.write_ssh_config()
     out.green("LXC containers started.")
+
+
+# -------------------------------------------------------------------
+# upgrade
+# -------------------------------------------------------------------
+
+
+def upgrade_cmd_options(parser):
+    parser.add_argument(
+        "names",
+        nargs="+",
+        metavar="NAME",
+        help="One or more relay containers to upgrade.",
+    ).completer = _container_completer
+
+
+def upgrade_cmd(args, out):
+    """Upgrade relay containers from Debian 12 to Debian 13.
+
+    Refuse containers without a deploy state (dns, builder).
+    """
+    ix = Incus(out)
+    for name in args.names:
+        ct = ix.get_running_relay(name)
+        if not ct.get_deploy_state():
+            raise SetupError(
+                f"{name!r} has no deploy state; only deployed relays can be upgraded."
+            )
+        with out.section(f"upgrade: {ct.shortname}"):
+            ct.upgrade_debian()
 
 
 # -------------------------------------------------------------------
@@ -608,6 +639,7 @@ SUBCOMMANDS = [
     ("test-mini", test_mini_cmd, test_mini_cmd_options),
     ("status", status_cmd, status_cmd_options),
     ("start", start_cmd, start_cmd_options),
+    ("dist-upgrade", upgrade_cmd, upgrade_cmd_options),
     ("stop", stop_cmd, stop_cmd_options),
     ("destroy", destroy_cmd, destroy_cmd_options),
 ]

@@ -40,6 +40,57 @@ BUILDER_DOMAIN = "builder.localchat"
 DNS_NS = "ns.localchat"
 DNS_CONTAINER_NAME = "ns-localchat"
 
+# In-place Debian 12 -> 13 upgrade, run inside a relay container.
+# --force-conf*: DEBIAN_FRONTEND silences debconf but not dpkg conffile
+# prompts, and we hand-edit resolv.conf and unbound config.
+UPGRADE_SCRIPT = r"""
+#!/bin/bash
+set -eux
+export DEBIAN_FRONTEND=noninteractive
+APT="apt-get -y -o DPkg::Lock::Timeout=300 \
+-o Dpkg::Options::=--force-confold \
+-o Dpkg::Options::=--force-confdef"
+# --allow-releaseinfo-change is an update-only option, apt errors out if it
+# is passed to install or full-upgrade
+APT_UPDATE="$APT update --allow-releaseinfo-change"
+
+# Ensure we have the dpkg lock
+systemctl disable --now unattended-upgrades \
+    apt-daily.timer apt-daily-upgrade.timer || true
+$APT purge unattended-upgrades || true
+
+# Backup our resolv.conf
+systemctl disable --now systemd-resolved || true
+systemctl mask systemd-resolved || true
+cp /etc/resolv.conf /root/resolv.conf.pre-upgrade
+
+# Allow libc6 restarts
+echo 'libraries/restart-without-asking boolean true' | debconf-set-selections
+
+# Upgrade to latest bookworm
+$APT_UPDATE
+$APT install debian-archive-keyring
+$APT full-upgrade
+
+# Rewrite both sources.list and .sources
+shopt -s nullglob
+for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list \
+         /etc/apt/sources.list.d/*.sources; do
+    sed -i 's/bookworm/trixie/g' "$f"
+done
+grep -rq trixie /etc/apt/sources.list /etc/apt/sources.list.d/
+
+$APT_UPDATE
+$APT full-upgrade
+$APT --purge autoremove
+apt-get clean
+
+cp /root/resolv.conf.pre-upgrade /etc/resolv.conf
+
+. /etc/os-release
+test "$VERSION_ID" = "13"
+"""
+
 
 class DNSConfigurationError(Exception):
     """Raised on DNS reachability or response failure."""
@@ -424,6 +475,31 @@ class RelayContainer(Container):
             self.out.print(
                 f"  Warning: Services on ports {ports} not ready after {timeout}s"
             )
+
+    def upgrade_debian(self):
+        """In-place dist-upgrade this relay from Debian 12 to 13.
+
+        Our apt-pin freezes dovecot at its bookworm build while the trixie
+        time_t transition removes libssl3/libtirpc3 underneath it, so dovecot
+        survives as an unrunnable package.  Redeploy afterwards.
+        """
+        path = "/root/cmlxc-upgrade.sh"
+        self.push_file_content(path, UPGRADE_SCRIPT, mode="755")
+        ret = self.out.shell(f"incus exec {self.name} -- {path}")
+        if ret:
+            raise SetupError(f"Debian upgrade failed on {self.shortname} (exit {ret})")
+
+        self.out.print("Restarting container after upgrade ...")
+        restart = self.incus.run(["restart", self.name, "--timeout=120"], check=False)
+        if restart.returncode:
+            self.out.red("Graceful restart timed out; forcing")
+            self.stop(force=True)
+            self.start()
+        self.wait_ready()
+        if not self.verify_ssh(self.incus.ssh_config_path):
+            raise SetupError(f"{self.shortname}: no SSH after upgrade reboot")
+        release = self.bash('. /etc/os-release; echo "$PRETTY_NAME"')
+        self.out.green(f"{self.shortname} upgraded: {release}")
 
     def verify_ssh(self, ssh_config):
         cmd = ["ssh", "-F", str(ssh_config), "-o", "ConnectTimeout=60"]
