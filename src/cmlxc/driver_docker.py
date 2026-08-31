@@ -87,9 +87,6 @@ def ensure_docker(ct):
         apt-get update -qq
         apt-get install -y -qq \
             docker-ce docker-ce-cli containerd.io docker-compose-plugin
-        mkdir -p /etc/docker
-        # Docker iptables rules conflict with LXC-managed networking.
-        printf '{"iptables": false}\\n' > /etc/docker/daemon.json
         systemctl enable --now docker
     """)
 
