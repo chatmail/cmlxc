@@ -16,8 +16,6 @@ except PackageNotFoundError:
     __version__ = "unknown"
 
 from cmlxc.container import (
-    BASE_IMAGE_ALIAS,
-    DNS_CONTAINER_NAME,
     BuilderContainer,
     DNSContainer,
 )
@@ -79,6 +77,14 @@ def parse_source(value: str, default_url: str) -> SourceSpec:
     raise ValueError(f"Invalid SOURCE: {value!r}. Use @ref, /path, ./path, or URL@ref.")
 
 
+_SHA_RE = re.compile(r"[0-9a-f]{40}")
+
+
+def is_sha(ref):
+    """Return True if ref is a full 40-char git SHA"""
+    return bool(_SHA_RE.fullmatch(ref or ""))
+
+
 _RELAY_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
 
 
@@ -106,6 +112,10 @@ class Driver:
     REQUIRED_SOURCE_PATHS: list[str] = []
     DEFAULT_REF: str = "main"
     type: str = "dns"
+    # False for drivers whose --source names a prebuilt artifact rather than
+    # a git ref (DockerDriver) and get source=None in run_deploy and does no
+    # deploy-time checkout; configure_from_args parses --source.
+    SOURCE_IS_GIT_REF: bool = True
 
     def __init__(self, ct, out):
         self.ct = ct
@@ -124,18 +134,7 @@ class Driver:
 
     def check_init(self):
         """Verify that the cmlxc environment has been initialized."""
-        managed = self.ix.list_managed()
-        dns_running = any(
-            c["name"] == DNS_CONTAINER_NAME and c["status"] == "Running"
-            for c in managed
-        )
-        if not dns_running or not self.ix.find_image([BASE_IMAGE_ALIAS]):
-            self.out.red("Error: cmlxc environment not initialized.")
-            self.out.red(
-                "Please run 'cmlxc init' first to set up the base image and DNS."
-            )
-            return False
-        return True
+        return self.ix.check_init()
 
     def get_builder(self):
         """Return the running builder container, or None.
@@ -155,13 +154,27 @@ class Driver:
     # ------------------------------------------------------------------
 
     @classmethod
+    def source_arg_kwargs(cls):
+        """Return argparse kwargs for ``--source``.
+
+        Override in drivers that accept a different set of source forms, so
+        that ``--help`` advertises what the driver actually implements.
+        """
+        return {
+            "default": f"@{cls.DEFAULT_REF}",
+            "help": (
+                "Driver source: @ref, /path, ./path, or URL@ref"
+                f" (default: @{cls.DEFAULT_REF})."
+            ),
+        }
+
+    @classmethod
     def add_cli_options(cls, parser, completer=None):
         """Register ``deploy-*`` CLI options on *parser*."""
         parser.add_argument(
             "--source",
-            default=f"@{cls.DEFAULT_REF}",
             metavar="SOURCE",
-            help=f"Driver source: @ref, /path, ./path, or URL@ref (default: @{cls.DEFAULT_REF}).",
+            **cls.source_arg_kwargs(),
         )
         action = parser.add_argument(
             "name",
@@ -208,8 +221,14 @@ class Driver:
         pass
 
     def on_init_relay(self, repo_path, tag):
-        """Hook called by ``init_builder`` after a relay checkout is ready."""
-        pass
+        """Hook called by ``init_builder`` after a relay checkout is ready.
+
+        Defaults to running scripts/initenv.sh, which cmdeploy-based drivers
+        need. Override without calling super for a driver that builds
+        the repo differently.
+        """
+        self.out.print(f"  Running scripts/initenv.sh for {self.ct.shortname} ...")
+        self.bld_ct.bash(f"cd {repo_path} && bash scripts/initenv.sh")
 
     @classmethod
     def get_git_main_path(cls, bld_ct, out):
@@ -270,12 +289,24 @@ class Driver:
                 f"  Copying {self.REPO_NAME}-git-main to {repo_path} on builder"
             )
             self.bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
-            if source.ref != "main":
+            ref_is_sha = is_sha(source.ref)
+            if ref_is_sha:
+                # Shallow clone won't have arbitrary commits; fetch just this one.
+                self.out.print(f"  Fetching {source.ref[:12]} ...")
+                self.bld_ct.bash(
+                    f"cd {repo_path} && git fetch --depth 1 origin {source.ref}"
+                )
+            elif source.ref != "main":
                 self.out.print(f"  Checking out {source.ref!r} ...")
+            reset_cmd = ""
+            if not ref_is_sha:
+                reset_cmd = (
+                    f"git reset --hard -q origin/{source.ref} 2>/dev/null || true"
+                )
             self.bld_ct.bash(f"""
                 cd {repo_path}
                 git checkout -q {source.ref}
-                git reset --hard -q origin/{source.ref} 2>/dev/null || true
+                {reset_cmd}
                 git clean -fdx
                 if [ -f .gitmodules ]; then
                     git submodule update --init --recursive
@@ -292,7 +323,7 @@ class Driver:
         tag = source.ref if source.kind == "remote" else None
         self.on_init_relay(repo_path, tag)
 
-    def run_deploy(self, *, source, ipv4_only):
+    def run_deploy(self, *, source, ipv4_only=False):
         """Perform the driver-specific deployment.
 
         Subclasses must implement.
@@ -334,16 +365,19 @@ class Driver:
             if not driver.get_builder():
                 return 1
 
-            source = parse_source(args.source, cls.DEFAULT_SOURCE_URL)
-            if not driver.check_local_source(source):
-                return 1
+            source = None
+            if cls.SOURCE_IS_GIT_REF:
+                source = parse_source(args.source, cls.DEFAULT_SOURCE_URL)
+                if not driver.check_local_source(source):
+                    return 1
 
             driver.configure_from_args(args)
 
             out.print(f"cmlxc {__version__}")
-            with out.section(f"Preparing {cls.CLI_NAME} source in builder"):
-                out.print(f"  Source: {source.description}")
-                driver.init_builder(source=source)
+            if source is not None:
+                with out.section(f"Preparing {cls.CLI_NAME} source in builder"):
+                    out.print(f"  Source: {source.description}")
+                    driver.init_builder(source=source)
 
             driver.run_deploy(
                 source=source,

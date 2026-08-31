@@ -5,6 +5,7 @@ Defines the base ``Container`` handle and its subclasses
 All interaction with Incus containers goes through these types.
 """
 
+import ipaddress
 import shlex
 import socket
 import subprocess
@@ -49,12 +50,15 @@ class SetupError(Exception):
     """User-facing error raised when a pre-condition is not met."""
 
 
-def _extract_ip(net_data, family="inet"):
+def _extract_ip(net_data, family="inet", subnet=None):
     for iface_name, iface in net_data.items():
         if iface_name == "lo":
             continue
         for addr in iface.get("addresses", []):
             if addr["family"] == family and addr["scope"] == "global":
+                if subnet is not None:
+                    if ipaddress.ip_address(addr["address"]) not in subnet:
+                        continue
                 return addr["address"]
     return None
 
@@ -98,6 +102,13 @@ def format_ssh_config(containers, key_path):
     return "".join(lines)
 
 
+def address_records(ct):
+    lines = [f"{ct.domain}. 3600 IN A {ct.ipv4}"]
+    if ct.ipv6:
+        lines.append(f"{ct.domain}. 3600 IN AAAA {ct.ipv6}")
+    return "\n".join(lines) + "\n"
+
+
 class Container:
     """Base container handle wrapping incus interactions."""
 
@@ -116,6 +127,23 @@ class Container:
         cmd = ["exec", self.name, "--", "bash", "-ec", script]
         return self.incus.run_output(cmd, check=check)
 
+    def bash_get(self, script):
+        """Run script, return stdout or None on failure without printing errors.
+
+        Use for existence checks and polls where None is the expected "absent" signal.
+        """
+        return self.bash(script, check=False)
+
+    def bash_do(self, script):
+        """Run script, print errors on failure but return None instead of raising.
+
+        Use when failure should be visible and the caller handles the None return.
+        """
+        try:
+            return self.bash(script)
+        except subprocess.CalledProcessError:
+            return None
+
     def run_cmd(self, *args, check=True):
         """Run command in container and return stdout."""
         return self.incus.run_output(
@@ -132,7 +160,7 @@ class Container:
             cmd.append("--force")
         self.incus.run(cmd, check=False)
 
-    def launch(self, image_candidates=None):
+    def launch(self, image_candidates=None, extra_config=None):
         """Launch from the base image or a provided candidate."""
         if image_candidates is None:
             image_candidates = [BASE_IMAGE_ALIAS]
@@ -147,6 +175,9 @@ class Container:
         cfg = []
         cfg += ("-c", f"{LABEL_KEY}=true")
         cfg += ("-c", f"{LABEL_DOMAIN}={self.domain}")
+        if extra_config:
+            for k, v in extra_config.items():
+                cfg += ("-c", f"{k}={v}")
         self.incus.run(["launch", image, self.name, *cfg])
         return image
 
@@ -164,7 +195,7 @@ class Container:
         )
         return result == "1"
 
-    def ensure(self, ipv4_only=False, image_candidates=None):
+    def ensure(self, ipv4_only=False, image_candidates=None, extra_config=None):
         data = self.incus.run_json(["list", self.name], check=False) or []
 
         existing = [c for c in data if c["name"] == self.name]
@@ -174,7 +205,7 @@ class Container:
             if not ipv4_only:
                 self.enable_ipv6()
         else:
-            self.launch(image_candidates=image_candidates)
+            self.launch(image_candidates=image_candidates, extra_config=extra_config)
         self.wait_ready(expect_ipv6=not ipv4_only)
         if ipv4_only:
             self.disable_ipv6()
@@ -283,7 +314,10 @@ class Container:
             )
             if data and data[0].get("status") == "Running":
                 net = data[0].get("state", {}).get("network", {})
-                self.ipv4 = _extract_ip(net, "inet")
+                # Docker relays expose docker0 alongside eth0, so restrict the
+                # IPv4 pick to the incus bridge subnet. No v6 filter for now as
+                # Docker's v6 support is off by default.
+                self.ipv4 = _extract_ip(net, "inet", subnet=self.incus.bridge_subnet)
                 self.ipv6 = _extract_ip(net, "inet6")
                 if self.ipv4 and (not expect_ipv6 or self.ipv6):
                     return
@@ -301,7 +335,9 @@ class Container:
 
         msg = f"Container {self.name!r} did not become ready within {timeout}s"
         if not self.ipv4:
-            msg += " (No IPv4 address obtained)"
+            subnet = self.incus.bridge_subnet
+            where = f" within incus bridge subnet {subnet}" if subnet else ""
+            msg += f" (No IPv4 address obtained{where})"
         elif expect_ipv6 and not self.ipv6:
             msg += " (Has IPv4, but NO IPv6 address obtained)"
         raise TimeoutError(msg)
@@ -356,8 +392,10 @@ class RelayContainer(Container):
             )
         super().destroy()
 
-    def launch(self, image_candidates=None):
-        image = super().launch(image_candidates=image_candidates)
+    def launch(self, image_candidates=None, extra_config=None):
+        image = super().launch(
+            image_candidates=image_candidates, extra_config=extra_config
+        )
         # Re-inject the current SSH key; cached images may have a stale one.
         pub_key = self.incus.ssh_key_path.with_suffix(".pub").read_text().strip()
         self.bash(f"""
@@ -371,12 +409,15 @@ class RelayContainer(Container):
         """)
         return image
 
-    def ensure(self, ipv4_only=False, image_candidates=None):
+    def ensure(self, ipv4_only=False, image_candidates=None, extra_config=None):
         out = self.out
         out.green(f"Ensuring container {self.name!r} ({self.domain}) ...")
 
-        super().ensure(ipv4_only=ipv4_only, image_candidates=image_candidates)
-
+        super().ensure(
+            ipv4_only=ipv4_only,
+            image_candidates=image_candidates,
+            extra_config=extra_config,
+        )
         if self.get_deploy_state():
             self.wait_services()
 

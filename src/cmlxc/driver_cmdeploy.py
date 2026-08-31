@@ -7,10 +7,46 @@ container -- no host-side Python imports are needed.
 import time
 from pathlib import Path
 
-from cmlxc.container import SetupError
+from cmlxc.container import SetupError, address_records
 from cmlxc.driver_base import Driver
 
 CMDEPLOY = "cmdeploy"
+
+
+def ensure_ipv6_known(ct):
+    if not ct.ipv6 and not ct.is_ipv6_disabled:
+        ct.wait_ready(expect_ipv6=True)
+
+
+def verify_dual_stack_zone(ct, zone_content):
+    if ct.ipv6 and "AAAA" not in zone_content:
+        raise SetupError(f"{ct.shortname}: dual-stack relay, zone has no AAAA")
+
+
+def run_test_cmdeploy(driver, test_addr, second_domain=None):
+    """Run the cmdeploy pytest suite via incus exec on the builder.
+
+    Shared by CmdeployDriver and DockerDriver, test_addr is the address
+    already resolved by the caller.
+    """
+    env = {"CHATMAIL_INI": f"{driver.repo_path}/chatmail.ini"}
+    if second_domain:
+        env["CHATMAIL_DOMAIN2"] = second_domain
+
+    driver.out.print(f"Running cmdeploy tests against {test_addr} ...")
+
+    env_args = "".join(f" --env {k}={v}" for k, v in env.items())
+    cmd = (
+        f"incus exec {driver.bld_ct.name}{env_args} --"
+        f" bash -c '"
+        f" source {driver.venv_path}/bin/activate &&"
+        f" cd {driver.repo_path} &&"
+        f" pytest cmdeploy/src/ -n4 -rs -x -v --durations=5'"
+    )
+    ret = driver.out.shell(cmd)
+    if ret:
+        driver.out.red(f"test-cmdeploy failed (exit {ret})")
+    return ret
 
 
 class CmdeployDriver(Driver):
@@ -31,9 +67,9 @@ class CmdeployDriver(Driver):
         parser.add_argument(
             "--type",
             dest="type",
-            choices=["dns", "ipv4", "ipv6"],
+            choices=["dns", "ipv4"],
             default="dns",
-            help="Deploy the relay using dns (default), ipv4, or ipv6.",
+            help="Deploy the relay using dns (default) or a bare ipv4 literal.",
         )
         parser.add_argument(
             "--filtermail",
@@ -51,10 +87,6 @@ class CmdeployDriver(Driver):
         if not self.ct.ipv4:
             self.ct.wait_ready()
         match self.type:
-            case "ipv6":
-                if not self.ct.ipv6:
-                    raise SetupError(f"{self.ct.name} has no IPv6 address.")
-                return self.ct.ipv6
             case "ipv4":
                 return self.ct.ipv4
             case _:
@@ -96,26 +128,7 @@ class CmdeployDriver(Driver):
             write_ini(
                 self.bld_ct, self.ct, domain, disable_ipv6=self.ct.is_ipv6_disabled
             )
-
-            ini_path = f"{self.repo_path}/chatmail.ini"
-            env = {"CHATMAIL_INI": ini_path}
-            if second_domain:
-                env["CHATMAIL_DOMAIN2"] = second_domain
-
-            self.out.print(f"Running cmdeploy tests against {domain} ...")
-
-            env_args = "".join(f" --env {k}={v}" for k, v in env.items())
-            cmd = (
-                f"incus exec {self.bld_ct.name}{env_args} --"
-                f" bash -c '"
-                f" source {self.venv_path}/bin/activate &&"
-                f" cd {self.repo_path} &&"
-                f" pytest cmdeploy/src/ -n4 -rs -x -v --durations=5'"
-            )
-            ret = self.out.shell(cmd)
-            if ret:
-                self.out.red(f"test-cmdeploy failed (exit {ret})")
-            return ret
+            return run_test_cmdeploy(self, domain, second_domain)
 
     def deploy(self, source=None):
         """Deploy chatmail services to a single relay via cmdeploy."""
@@ -128,10 +141,8 @@ class CmdeployDriver(Driver):
 
         domain = self.get_test_domain_or_ip()
         if self.type == "dns":
-            dns_ct.set_dns_records(
-                domain,
-                f"{domain}. 3600 IN A {self.ct.ipv4}",
-            )
+            ensure_ipv6_known(self.ct)
+            dns_ct.set_dns_records(domain, address_records(self.ct))
 
         with self.out.section(f"cmdeploy run: {self.ct.shortname} ({domain})"):
             self.out.print("Preparing chatmail.ini on builder ...")
@@ -151,6 +162,7 @@ class CmdeployDriver(Driver):
                 self._run_cmdeploy("dns", "--zonefile", zone_path)
 
                 zone_content = self.bld_ct.bash(f"cat {zone_path}")
+                verify_dual_stack_zone(self.ct, zone_content)
                 self.out.print("  Loading zone content into PowerDNS ...")
                 dns_ct.set_dns_records(self.ct.domain, zone_content)
                 # Flush stale NXDOMAIN entries cached during initial checks
@@ -191,40 +203,54 @@ class CmdeployDriver(Driver):
 # ------------------------------------------------------------------
 
 
+TEST_INI_OVERRIDES = {
+    "max_user_send_per_minute": 600,
+    "max_user_send_burst_size": 100,
+    # Relays reject new address creation while the machine looks
+    # busy, which a CI runner hosting several containers always
+    # does.  Test relays are throwaway, so lift the gates instead
+    # of losing accounts to unrelated load.
+    "max_load_1m": 1000,
+    "min_available_memory": "1M",
+    "min_free_disk_space": "1M",
+    "mtail_address": "127.0.0.1",
+}
+
+
 def get_ini_overrides(domain, disable_ipv6=False):
     """Return chatmail.ini settings suited for throwaway test relays."""
-    overrides = {
-        "max_user_send_per_minute": 600,
-        "max_user_send_burst_size": 100,
-        # Relays reject new address creation while the machine looks
-        # busy, which a CI runner hosting several containers always
-        # does.  Test relays are throwaway, so lift the gates instead
-        # of losing accounts to unrelated load.
-        "max_load_1m": 1000,
-        "min_available_memory": "1M",
-        "min_free_disk_space": "1M",
-        "mtail_address": "127.0.0.1",
-        "ssh_host": domain,
-    }
+    overrides = dict(TEST_INI_OVERRIDES)
+    overrides["ssh_host"] = domain
     if disable_ipv6:
         overrides["disable_ipv6"] = "True"
     return overrides
 
 
-def write_ini(builder_ct, ct, domain, disable_ipv6=False):
-    """Write a chatmail.ini for *ct* using the builder container."""
-    overrides = get_ini_overrides(domain, disable_ipv6=disable_ipv6)
+def make_ini_script(domain, ini_path, overrides):
+    """Return a Python -c snippet that calls write_initial_config."""
     overrides_str = ", ".join(
         f"'{k}': '{v}'" if isinstance(v, str) else f"'{k}': {v}"
         for k, v in overrides.items()
     )
+    return "\n".join(
+        [
+            "from chatmaild.config import write_initial_config",
+            "from pathlib import Path",
+            f"write_initial_config(Path('{ini_path}'), '{domain}', {{{overrides_str}}})",
+        ]
+    )
+
+
+def write_ini(builder_ct, ct, domain, disable_ipv6=False):
+    """Write a chatmail.ini for *ct* using the builder container."""
+    overrides = get_ini_overrides(domain, disable_ipv6=disable_ipv6)
     repo_path = ct.get_repo_path(CMDEPLOY)
     ini_path = f"{repo_path}/chatmail.ini"
+    venv_path = f"{repo_path}/venv"
+    script = make_ini_script(domain, ini_path, overrides)
     builder_ct.bash(f"""
-        source {repo_path}/venv/bin/activate
+        source {venv_path}/bin/activate
         python3 -c "
-from chatmaild.config import write_initial_config
-from pathlib import Path
-write_initial_config(Path('{ini_path}'), '{domain}', {{{overrides_str}}})
+{script}
 "
     """)
