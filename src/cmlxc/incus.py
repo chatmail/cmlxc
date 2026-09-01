@@ -10,6 +10,7 @@ a container must be destroyed before switching drivers.
 
 import ipaddress
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -88,6 +89,7 @@ class Incus:
         containers = self.list_managed()
         text = format_ssh_config(containers, self.ssh_key_path)
         self.ssh_config_path.write_text(text)
+        os.chown(self.ssh_config_path, os.getuid(), os.getuid())
         return self.ssh_config_path
 
     def check_ssh_include(self):
