@@ -1,4 +1,19 @@
 
+## [0.17.1] - 2026-09-17
+
+### CI
+
+- add nightly workflow.
+
+### Features / Changes
+
+- madmail: port deploy-madmail driver to v2 Rust build.
+
+### Fixes
+
+- don't trip on /etc/resolve.conf being a symlink.
+
+
 ## [0.17.0] - 2026-08-12
 
 ### CI
