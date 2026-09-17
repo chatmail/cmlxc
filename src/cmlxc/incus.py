@@ -251,6 +251,7 @@ class Incus:
         host_ns = self.get_host_nameservers()
         ns_lines = "\n".join(f"nameserver {n}" for n in host_ns)
         ct.bash(f"""
+            rm -f /etc/resolv.conf
             printf '{ns_lines}\\n' > /etc/resolv.conf
             apt-get -o DPkg::Lock::Timeout=60 update
             DEBIAN_FRONTEND=noninteractive apt-get purge -y unattended-upgrades
