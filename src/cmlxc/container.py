@@ -98,6 +98,13 @@ def format_ssh_config(containers, key_path):
     return "".join(lines)
 
 
+def address_records(ct):
+    lines = [f"{ct.domain}. 3600 IN A {ct.ipv4}"]
+    if ct.ipv6:
+        lines.append(f"{ct.domain}. 3600 IN AAAA {ct.ipv6}")
+    return "\n".join(lines) + "\n"
+
+
 class Container:
     """Base container handle wrapping incus interactions."""
 
