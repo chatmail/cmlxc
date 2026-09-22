@@ -32,7 +32,7 @@ class MadmailDriver(Driver):
     DEFAULT_SOURCE_URL = "https://github.com/themadorg/madmail.git"
     REQUIRED_SOURCE_PATHS = ["Cargo.toml", "Makefile"]
     REPO_NAME = "madmail"
-    DEFAULT_REF = "v2.23.2"
+    DEFAULT_REF = "v2.29.1"
     type = "ipv4"
 
     @classmethod
