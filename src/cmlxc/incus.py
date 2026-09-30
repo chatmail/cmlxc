@@ -88,6 +88,7 @@ class Incus:
         containers = self.list_managed()
         text = format_ssh_config(containers, self.ssh_key_path)
         self.ssh_config_path.write_text(text)
+        self.ssh_config_path.chmod(0o600)
         return self.ssh_config_path
 
     def check_ssh_include(self):
