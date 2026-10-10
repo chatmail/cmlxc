@@ -114,9 +114,13 @@ def test_hide_senders_ip_address(cmfactory, ssl_context):
 
     chat.send_text("testing submission header cleanup")
     user2.wait_for_incoming_msg()
-    addr = user2.get_config("addr")
+    # Delta Chat 2.63 stopped writing the legacy addr and mail_pw config keys.
+    # The address and password live on the transport.
+    transports = user2.list_transports()
+    assert transports, "expected a configured transport"
+    addr = transports[0]["addr"]
+    pw = transports[0]["password"]
     host = addr.split("@")[1].strip("[]")
-    pw = user2.get_config("mail_pw")
 
     # madmail's IMAP server doesn't implement SEARCH/UID SEARCH, fetch by range instead.
     imap = imaplib.IMAP4_SSL(host, ssl_context=ssl_context)
