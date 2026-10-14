@@ -138,7 +138,7 @@ def test_mad_stale_checkout_discarded():
 
 
 def test_mad_deploy():
-    cmlxc("deploy-madmail", CT_MAD)
+    cmlxc("deploy-madmail", "--source", "@main", CT_MAD)
 
 
 def test_mad_deploy_type():

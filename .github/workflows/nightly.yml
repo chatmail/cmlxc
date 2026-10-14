@@ -20,7 +20,7 @@ jobs:
         cmlxc deploy-cmdeploy --type ipv4 --source @main fulltest-ip0
         cmlxc test-mini fulltest-ip0
         cmlxc test-cmdeploy fulltest-ip0
-        cmlxc deploy-madmail fulltest-mad0
+        cmlxc deploy-madmail --source @main fulltest-mad0
         cmlxc test-mini fulltest-mad0
         cmlxc test-madmail fulltest-mad0
         cmlxc test-mini fulltest0 fulltest-mad0
