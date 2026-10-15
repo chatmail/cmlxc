@@ -1,4 +1,23 @@
 
+## [0.17.2] - 2026-10-15
+
+### CI
+
+- run cmlxc's own madmail tests against madmail main.
+
+### Fixes
+
+- read IMAP credentials from `list_transports()`.
+
+- fix `ssh_config_file` group ownership for non-admin incus.
+
+- chmod is sufficient to secure SSH config permissions.
+
+### Other
+
+- default to madmail v2.29.1.
+
+
 ## [0.17.1] - 2026-09-17
 
 ### CI
