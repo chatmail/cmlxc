@@ -20,6 +20,7 @@ from cmlxc.container import (
     DNS_CONTAINER_NAME,
     BuilderContainer,
     DNSContainer,
+    SetupError,
 )
 from cmlxc.incus import Incus
 
@@ -46,6 +47,7 @@ def parse_source(value: str, default_url: str) -> SourceSpec:
 
     Accepted forms:
       @ref           -- branch/tag on the default remote
+      @latest        -- newest release tag
       /path or ./path -- local directory
       URL@ref        -- custom remote at a given ref
     """
@@ -62,6 +64,19 @@ def parse_source(value: str, default_url: str) -> SourceSpec:
     if "/" in value:
         return SourceSpec("remote", url=default_url, ref=value)
     raise ValueError(f"Invalid SOURCE: {value!r}. Use @ref, /path, ./path, or URL@ref.")
+
+
+# Don't match pre-release and non-semver tags
+_RELEASE_TAG_RE = re.compile(r"^v?\d+\.\d+\.\d+$")
+
+
+def latest_release_tag(tag_output):
+    """Pick the first matching and thus newest release tag from
+    ``git tag -l --sort=-v:refname`` output."""
+    for tag in (tag_output or "").splitlines():
+        if _RELEASE_TAG_RE.match(tag):
+            return tag
+    return None
 
 
 _RELAY_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
@@ -146,7 +161,10 @@ class Driver:
             "--source",
             default=f"@{cls.DEFAULT_REF}",
             metavar="SOURCE",
-            help=f"Driver source: @ref, /path, ./path, or URL@ref (default: @{cls.DEFAULT_REF}).",
+            help=(
+                "Driver source: @ref (branch, tag), @latest (newest release tag),"
+                f" /path, ./path, or URL@ref (default: @{cls.DEFAULT_REF})."
+            ),
         )
         action = parser.add_argument(
             "name",
@@ -235,7 +253,9 @@ class Driver:
 
         tmp_dest, exists = cls.get_git_main_path(bld_ct, out)
         if not exists:
-            source = parse_source(f"@{cls.DEFAULT_REF}", cls.DEFAULT_SOURCE_URL)
+            # Always main: this is the shared cache clone, and init_builder
+            # checks the requested ref out of its copy
+            source = parse_source("@main", cls.DEFAULT_SOURCE_URL)
             bld_ct.setup_repo(tmp_dest, out, source)
         else:
             out.print(f"  Fetching {cls.REPO_NAME}-git-main from upstream ...")
@@ -255,6 +275,15 @@ class Driver:
                 f"  Copying {self.REPO_NAME}-git-main to {repo_path} on builder"
             )
             self.bld_ct.bash(f"rm -rf {repo_path} && cp -a {tmp_dest} {repo_path}")
+            if source.ref == "latest":
+                # prep_builder already fetched --tags, update source to replace
+                # "latest" with the tag
+                source.ref = latest_release_tag(
+                    self.bld_ct.bash(f"cd {repo_path} && git tag -l --sort=-v:refname")
+                )
+                if not source.ref:
+                    raise SetupError(f"No release tag found for {self.REPO_NAME}")
+                self.out.print(f"  Resolved @latest to {source.ref}")
             if source.ref != "main":
                 self.out.print(f"  Checking out {source.ref!r} ...")
             self.bld_ct.bash(f"""
