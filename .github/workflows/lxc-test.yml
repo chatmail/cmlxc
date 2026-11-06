@@ -78,7 +78,7 @@ jobs:
           sudo curl -fsSL https://pkgs.zabbly.com/key.asc -o /etc/apt/keyrings/zabbly.asc
           echo "deb [signed-by=/etc/apt/keyrings/zabbly.asc] https://pkgs.zabbly.com/incus/stable $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/zabbly-incus.list
           sudo apt-get update
-          sudo apt-get install -y incus incus-client incus-base
+          sudo apt-get install -y incus-client incus-base
           incus --version
 
       - name: Initialise Incus
@@ -104,9 +104,9 @@ jobs:
           uv tool install ./cmlxc
           uv --color never tool dir --bin >> "$GITHUB_PATH"
 
-      - name: Cache Incus images
+      - name: Restore Incus image cache
         id: cache-images
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: /tmp/incus-cache
           key: incus-v6-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/*.py', 'cmlxc/.github/workflows/lxc-test.yml') }}
@@ -196,6 +196,7 @@ jobs:
           done
 
       - name: Export images for cache
+        id: export-images
         if: always() && steps.cache-images.outputs.cache-hit != 'true'
         run: |
           mkdir -p /tmp/incus-cache
@@ -204,6 +205,7 @@ jobs:
             echo "Publishing builder container as image ..."
             incus publish builder-localchat --alias localchat-builder --force || true
           fi
+          exported=0
           for alias in localchat-base localchat-builder; do
             if incus image list --format csv -c l | grep -q "^$alias$"; then
               echo "Exporting: $alias"
@@ -211,6 +213,16 @@ jobs:
               if [ -f /tmp/incus-cache/$alias ] && [ ! -f /tmp/incus-cache/$alias.tar.gz ]; then
                 mv /tmp/incus-cache/$alias /tmp/incus-cache/$alias.tar.gz
               fi
+              exported=$((exported+1))
             fi
           done
+          echo "exported=$exported" >> "$GITHUB_OUTPUT"
+
+      # Split from the restore above so a FAILED run still saves its images.
+      - name: Save Incus image cache
+        if: always() && steps.export-images.outputs.exported > 0
+        uses: actions/cache/save@v6
+        with:
+          path: /tmp/incus-cache
+          key: incus-v6-${{ runner.os }}-${{ hashFiles('cmlxc/src/cmlxc/*.py', 'cmlxc/.github/workflows/lxc-test.yml') }}
 
