@@ -10,9 +10,10 @@ from cmlxc.container import (
     RelayContainer,
     SetupError,
     _extract_ip,
+    address_records,
     format_ssh_config,
 )
-from cmlxc.driver_cmdeploy import CmdeployDriver
+from cmlxc.driver_cmdeploy import CmdeployDriver, verify_dual_stack_zone
 from cmlxc.driver_madmail import MadmailDriver
 from cmlxc.incus import (
     Incus,
@@ -55,6 +56,30 @@ def test_extract_ip():
     assert _extract_ip(link_only) is None
     # empty dict → None
     assert _extract_ip({}) is None
+
+
+def test_address_records(ix):
+    ct = RelayContainer(ix, "t0")
+    ct.ipv4 = "10.0.0.5"
+    ct.ipv6 = "fd42::1"
+    assert address_records(ct) == (
+        "_t0.localchat. 3600 IN A 10.0.0.5\n_t0.localchat. 3600 IN AAAA fd42::1\n"
+    )
+    # v4-only container -> A record only
+    ct.ipv6 = None
+    assert address_records(ct) == "_t0.localchat. 3600 IN A 10.0.0.5\n"
+
+
+def test_verify_dual_stack_zone(ix):
+    ct = RelayContainer(ix, "t0")
+    ct.ipv6 = "fd42::1"
+    # dual-stack without AAAA
+    with pytest.raises(SetupError, match="no AAAA"):
+        verify_dual_stack_zone(ct, "_t0.localchat. 3600 IN A 10.0.0.5\n")
+    verify_dual_stack_zone(ct, "_t0.localchat. 3600 IN AAAA fd42::1\n")
+    # v4-only relay
+    ct.ipv6 = None
+    verify_dual_stack_zone(ct, "_t0.localchat. 3600 IN A 10.0.0.5\n")
 
 
 def test_is_ip_address():

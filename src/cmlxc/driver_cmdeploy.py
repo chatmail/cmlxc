@@ -7,10 +7,20 @@ container -- no host-side Python imports are needed.
 import time
 from pathlib import Path
 
-from cmlxc.container import SetupError
+from cmlxc.container import SetupError, address_records
 from cmlxc.driver_base import Driver
 
 CMDEPLOY = "cmdeploy"
+
+
+def ensure_ipv6_known(ct):
+    if not ct.ipv6 and not ct.is_ipv6_disabled:
+        ct.wait_ready(expect_ipv6=True)
+
+
+def verify_dual_stack_zone(ct, zone_content):
+    if ct.ipv6 and "AAAA" not in zone_content:
+        raise SetupError(f"{ct.shortname}: dual-stack relay, zone has no AAAA")
 
 
 class CmdeployDriver(Driver):
@@ -128,10 +138,8 @@ class CmdeployDriver(Driver):
 
         domain = self.get_test_domain_or_ip()
         if self.type == "dns":
-            dns_ct.set_dns_records(
-                domain,
-                f"{domain}. 3600 IN A {self.ct.ipv4}",
-            )
+            ensure_ipv6_known(self.ct)
+            dns_ct.set_dns_records(domain, address_records(self.ct))
 
         with self.out.section(f"cmdeploy run: {self.ct.shortname} ({domain})"):
             self.out.print("Preparing chatmail.ini on builder ...")
@@ -151,6 +159,7 @@ class CmdeployDriver(Driver):
                 self._run_cmdeploy("dns", "--zonefile", zone_path)
 
                 zone_content = self.bld_ct.bash(f"cat {zone_path}")
+                verify_dual_stack_zone(self.ct, zone_content)
                 self.out.print("  Loading zone content into PowerDNS ...")
                 dns_ct.set_dns_records(self.ct.domain, zone_content)
                 # Flush stale NXDOMAIN entries cached during initial checks
