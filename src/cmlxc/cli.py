@@ -21,6 +21,7 @@ from cmlxc.container import (
 )
 from cmlxc.driver_base import __version__
 from cmlxc.driver_cmdeploy import CmdeployDriver
+from cmlxc.driver_cmrelay import CmrelayDriver
 from cmlxc.driver_madmail import MadmailDriver, print_admin_info
 from cmlxc.incus import Incus, _is_ip_address, check_cgroup_compat
 from cmlxc.output import Out
@@ -269,10 +270,15 @@ def test_cmdeploy_cmd_options(parser):
 
 
 def test_cmdeploy_cmd(args, out):
-    """Run cmdeploy integration tests inside the builder container."""
+    """Run cmdeploy integration tests inside the builder container.
+
+    With the driver that deployed the relay: a cmrelay relay passes the same
+    suite, told how it reports its version and status.
+    """
     ix = Incus(out)
     ct = ix.get_running_relay(args.relay)
-    driver = CmdeployDriver(ct, out)
+    driver_cls = DRIVER_BY_NAME.get(ct.driver_name, CmdeployDriver)
+    driver = driver_cls(ct, out)
     if not driver.check_init():
         return 1
 
@@ -612,7 +618,11 @@ SUBCOMMANDS = [
     ("destroy", destroy_cmd, destroy_cmd_options),
 ]
 
-DRIVER_BY_NAME = {"cmdeploy": CmdeployDriver, "madmail": MadmailDriver}
+DRIVER_BY_NAME = {
+    "cmdeploy": CmdeployDriver,
+    "cmrelay": CmrelayDriver,
+    "madmail": MadmailDriver,
+}
 
 
 def _add_subcommand(subparsers, name, func, addopts, shared):
