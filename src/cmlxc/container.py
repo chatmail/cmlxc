@@ -514,7 +514,7 @@ class BuilderContainer(Container):
         lpath = shlex.quote(str(local_path))
         rpath = shlex.quote(str(remote_path))
         excludes = " ".join(
-            f"--exclude='{d}'" for d in ["venv", ".tox", "__pycache__", ".ruff_cache"]
+            f"--exclude='{d}'" for d in ["*venv", ".tox", "__pycache__", ".ruff_cache"]
         )
         cmd = (
             f"tar -C {lpath} {excludes} -cf - . | "

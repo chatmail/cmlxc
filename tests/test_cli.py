@@ -6,6 +6,7 @@ import pytest
 
 from cmlxc.driver_base import SourceSpec, parse_source, validate_relay_name
 from cmlxc.driver_cmdeploy import get_ini_overrides
+from cmlxc.driver_cmrelay import installer_url
 from cmlxc.driver_madmail import release_asset_url
 
 URL = "https://github.com/chatmail/relay.git"
@@ -83,3 +84,21 @@ def test_release_asset_url(tag, arch, expected_asset):
         assert url is None
     else:
         assert url.endswith(f"/v2.23.0/{expected_asset}")
+
+
+@pytest.mark.parametrize(
+    "tag, arch, expected_asset",
+    [
+        ("v0.6.0", "x86_64", "cmrelay-installer-0.6.0-x86_64-linux.run"),
+        ("v0.6.0", "aarch64", "cmrelay-installer-0.6.0-aarch64-linux.run"),
+        ("main", "x86_64", None),
+        ("v0.6.0-1-gabc1234", "x86_64", None),
+        ("v0.6.0", "riscv64", None),
+    ],
+)
+def test_installer_url(tag, arch, expected_asset):
+    url = installer_url(tag, arch)
+    if expected_asset is None:
+        assert url is None
+    else:
+        assert url.endswith(f"/v0.6.0/{expected_asset}")
