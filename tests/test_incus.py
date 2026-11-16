@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from cmlxc.container import (
+    LABEL_KEY,
     BuilderContainer,
     DNSContainer,
     RelayContainer,
@@ -168,3 +169,14 @@ def test_madmail_prep_builder_installs_no_build_tools(ix):
     MadmailDriver.prep_builder(ix, Out(), bld_ct)
     assert scripts
     assert not [s for s in scripts if "rustup" in s or "nodesource" in s]
+
+
+def test_list_managed_skips_containers_being_created():
+    class Listed(Incus):
+        def run_json(self, args):
+            # incus lists a container that is being created with null config and state
+            managed = {"name": "cm0", "config": {LABEL_KEY: "true"}, "state": None}
+            return [{"name": "other", "config": None, "state": None}, managed]
+
+    [ct] = Listed(Out()).list_managed()
+    assert ct["name"] == "cm0" and ct["ip"] is None

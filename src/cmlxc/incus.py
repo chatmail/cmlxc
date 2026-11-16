@@ -206,11 +206,11 @@ class Incus:
         """Return list of dicts with name, ip, ipv6, domain, status."""
         containers = []
         for ct in self.run_json(["list"]):
-            config = ct.get("config", {})
+            config = ct.get("config") or {}
             if config.get(LABEL_KEY) != "true":
                 continue
             name = ct["name"]
-            state = ct.get("state", {})
+            state = ct.get("state") or {}
             net = state.get("network") or {}
             containers.append(
                 {

@@ -1,15 +1,7 @@
 """cmrelay-based deployment driver for cmlxc.
 
-cmrelay installs a whole chatmail relay from one self-extracting file,
-so this driver pushes that file into the relay container, runs it,
-writes the test ``chatmail.ini`` with the chatmaild it ships,
-and runs ``cmrelay deploy`` there; the builder needs no checkout for it.
-Only ``test-cmdeploy`` checks out chatmail/relay at the commit the relay carries,
-through a ``CmdeployDriver``, because a cmrelay host has to pass the same tests
-as a cmdeploy one.
-
-The installer file is built with Nix on the host that runs cmlxc,
-or given ready-made with ``--payload``; the containers never need Nix.
+The installer file is built with Nix on the host
+and pushed into the relay container, which runs it.
 """
 
 import os
@@ -28,8 +20,7 @@ CMRELAY_BIN = "/opt/cmrelay/lib/bin/cmrelay"
 PAYLOAD_PATH = "/root/cmrelay.run"
 INSTALLED_INI = "/opt/cmrelay/chatmail.ini"
 
-# mtail is the operator's to install; this does what cmrelay's precheck tells them,
-# with the URL and checksum the installed closure pins
+# mtail, as cmrelay's precheck asks, from the closure's pins
 INSTALL_MTAIL = r"""
 import glob, hashlib, io, json, platform, tarfile, urllib.request
 [pins] = glob.glob("/opt/cmrelay/lib/store/*-cmrelay-closure/cmrelay/vendor/pins.json")
@@ -74,7 +65,6 @@ class CmrelayDriver(Driver):
         return self.ct.domain
 
     def init_builder(self, source):
-        """The installer file, from the host; the builder needs nothing for a deploy."""
         self.payload_file = self.build_payload(source)
         size = self.payload_file.stat().st_size / (1024 * 1024)
         self.out.print(f"  payload: {self.payload_file.name} ({size:.0f} MiB)")
@@ -135,7 +125,7 @@ class CmrelayDriver(Driver):
         with self.out.section(f"cmrelay install: {self.ct.shortname} ({domain})"):
             self.push_payload()
             self.install(domain)
-            # after the deploy, which points resolv.conf at its own unbound
+            # the deploy points resolv.conf at its own unbound
             self.out.print(f"Configuring localchat DNS for {self.ct.shortname} ...")
             self.ct.setup_resolvconf_localchat_nameserver(dns_ct.ipv4)
             self.ct.setup_unbound_localchat_forwarder(dns_ct.ipv4)
@@ -160,11 +150,7 @@ class CmrelayDriver(Driver):
         self.ct.bash(f"chmod 755 {PAYLOAD_PATH}")
 
     def install(self, domain):
-        """The installer once, the test ini, mtail as an operator installs it, a deploy.
-
-        On a container that has cmrelay already the installer is skipped,
-        since it refuses a populated store, and the test ini replaces the one in place.
-        """
+        """Run the installer once, write the test ini, install mtail, deploy."""
         if self.ct.bash(f"test -x {CMRELAY_BIN}", check=False) is None:
             if self.out.shell(f"incus exec {self.ct.name} -- {PAYLOAD_PATH}"):
                 raise SetupError(f"cmrelay install failed on {self.ct.shortname}")
@@ -176,7 +162,7 @@ class CmrelayDriver(Driver):
             "from chatmaild.config import write_initial_config\n"
             f"write_initial_config(Path({INSTALLED_INI!r}), {domain!r}, {overrides!r})\n",
         )
-        # the interpreter of cmrelay's CLI, which imports chatmaild
+        # cmrelay's python has chatmaild
         self.ct.bash(f'"$(sed -n "1s/^#!//p" {CMRELAY_BIN})" /root/write-ini.py')
         if self.ct.bash("test -x /usr/local/bin/mtail", check=False) is None:
             self.out.print("Installing mtail ...")
@@ -191,10 +177,7 @@ class CmrelayDriver(Driver):
             raise SetupError(f"cmrelay deploy failed on {self.ct.shortname}")
 
     def run_tests(self, second_domain=None):
-        """chatmail/relay's acceptance suite, at the commit this relay carries.
-
-        Its checkout and venv are made here, once per commit, not at deploy time.
-        """
+        """Run chatmail/relay's tests at the commit this relay carries."""
         relay = self.relay
         relay.bld_ct = self.bld_ct
         marker = self.ct.bash("cat /etc/chatmail-version", check=False) or ""

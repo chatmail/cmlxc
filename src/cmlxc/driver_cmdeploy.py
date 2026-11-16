@@ -90,10 +90,7 @@ class CmdeployDriver(Driver):
         self.out.section_line(f"deploy cmdeploy complete ({elapsed:.1f}s)")
 
     def run_tests(self, second_domain=None, extra_env=None):
-        """Execute the cmdeploy test suite against the relay.
-
-        *extra_env* reaches the tests that ask how the relay was installed.
-        """
+        """Execute the cmdeploy test suite against the relay."""
         with self.out.section("cmdeploytest"):
             self.out.print("Preparing chatmail.ini on builder ...")
             domain = self.get_test_domain_or_ip()

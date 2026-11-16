@@ -270,11 +270,7 @@ def test_cmdeploy_cmd_options(parser):
 
 
 def test_cmdeploy_cmd(args, out):
-    """Run cmdeploy integration tests inside the builder container.
-
-    With the driver that deployed the relay: a cmrelay relay passes the same
-    suite, told how it reports its version and status.
-    """
+    """Run cmdeploy integration tests inside the builder container."""
     ix = Incus(out)
     ct = ix.get_running_relay(args.relay)
     driver_cls = DRIVER_BY_NAME.get(ct.driver_name, CmdeployDriver)
