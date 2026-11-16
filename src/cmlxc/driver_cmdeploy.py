@@ -4,6 +4,7 @@ All cmdeploy/chatmaild operations run inside the builder
 container -- no host-side Python imports are needed.
 """
 
+import shlex
 import time
 from pathlib import Path
 
@@ -88,7 +89,7 @@ class CmdeployDriver(Driver):
         elapsed = time.time() - t_total
         self.out.section_line(f"deploy cmdeploy complete ({elapsed:.1f}s)")
 
-    def run_tests(self, second_domain=None):
+    def run_tests(self, second_domain=None, extra_env=None):
         """Execute the cmdeploy test suite against the relay."""
         with self.out.section("cmdeploytest"):
             self.out.print("Preparing chatmail.ini on builder ...")
@@ -101,10 +102,13 @@ class CmdeployDriver(Driver):
             env = {"CHATMAIL_INI": ini_path}
             if second_domain:
                 env["CHATMAIL_DOMAIN2"] = second_domain
+            env.update(extra_env or {})
 
             self.out.print(f"Running cmdeploy tests against {domain} ...")
 
-            env_args = "".join(f" --env {k}={v}" for k, v in env.items())
+            env_args = "".join(
+                f" --env {k}={shlex.quote(str(v))}" for k, v in env.items()
+            )
             cmd = (
                 f"incus exec {self.bld_ct.name}{env_args} --"
                 f" bash -c '"
