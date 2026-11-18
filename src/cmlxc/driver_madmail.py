@@ -32,7 +32,7 @@ class MadmailDriver(Driver):
     DEFAULT_SOURCE_URL = "https://github.com/themadorg/madmail.git"
     REQUIRED_SOURCE_PATHS = ["Cargo.toml", "Makefile"]
     REPO_NAME = "madmail"
-    DEFAULT_REF = "v2.29.1"
+    DEFAULT_REF = "v2.42.0"
     type = "ipv4"
 
     @classmethod
@@ -50,12 +50,6 @@ class MadmailDriver(Driver):
 
     def configure_from_args(self, args):
         self.with_admin = bool(args.with_webadmin)
-
-    @classmethod
-    def on_prep_builder(cls, out, bld_ct, tmp_dest):
-        """Hook called by ``prep_builder`` to ensure the Rust toolchain is ready."""
-        out.print("  Ensuring build environment (Rust) ...")
-        prepare_build_container(bld_ct, tmp_dest)
 
     def on_init_relay(self, repo_path, tag):
         arch = self.bld_ct.bash("dpkg --print-architecture")
@@ -87,6 +81,8 @@ class MadmailDriver(Driver):
         with self.out.section(
             f"Building madmail binary for {self.ct.shortname} ({mode})"
         ):
+            self.out.print("  Ensuring build environment (Rust) ...")
+            prepare_build_container(self.bld_ct, repo_path)
             self.bld_ct.bash(f"cd '{repo_path}' && make init")
 
             if self.with_admin:

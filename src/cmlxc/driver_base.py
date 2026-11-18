@@ -187,11 +187,6 @@ class Driver:
             return False
         return True
 
-    @classmethod
-    def on_prep_builder(cls, out, bld_ct, tmp_dest):
-        """Hook called by ``prep_builder`` after the git-main checkout is ready."""
-        pass
-
     def on_init_relay(self, repo_path, tag):
         """Hook called by ``init_builder`` after a relay checkout is ready."""
         pass
@@ -216,7 +211,7 @@ class Driver:
 
     @classmethod
     def prep_builder(cls, ix, out, bld_ct):
-        """Hook called by ``cmlxc init`` to prepare toolchains and main checkout."""
+        """Hook called by ``cmlxc init`` to prepare the main checkout."""
         # Trust all repo paths inside the builder (ownership differs from host).
         bld_ct.bash("mkdir -p /root/relays")
         bld_ct.bash("git config --global --add safe.directory '*'", check=False)
@@ -240,9 +235,6 @@ class Driver:
         else:
             out.print(f"  Fetching {cls.REPO_NAME}-git-main from upstream ...")
             bld_ct.bash(f"cd {tmp_dest} && git fetch origin")
-
-        # Driver-specific toolchain setup
-        cls.on_prep_builder(out, bld_ct, tmp_dest)
 
     def init_builder(self, source):
         """Hook called by ``deploy-*`` to prepare a relay checkout and build."""
