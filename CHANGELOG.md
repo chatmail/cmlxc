@@ -1,4 +1,11 @@
 
+## [0.17.3] - 2026-11-18
+
+### Fixes
+
+- resolve through ns-localchat while cmdeploy runs on a relay.
+
+
 ## [0.17.2] - 2026-10-15
 
 ### CI
