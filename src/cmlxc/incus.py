@@ -33,6 +33,7 @@ from cmlxc.container import (
 )
 
 BASE_SETUP_NAME = "localchat-base-setup"
+RESOLV_PATHS = ("/run/systemd/resolve/resolv.conf", "/etc/resolv.conf")
 
 
 def _is_ip_address(s):
@@ -100,21 +101,24 @@ class Incus:
         target = f"include {self.ssh_config_path}".lower()
         return any(line.strip().lower() == target for line in lines)
 
-    def get_host_nameservers(self):
-        """Return upstream nameservers found on the host."""
+    def get_host_nameservers(self, paths=RESOLV_PATHS):
+        """Return the host's upstream nameservers, or raise ``SetupError``."""
         ns = []
-        for path in ["/run/systemd/resolve/resolv.conf", "/etc/resolv.conf"]:
+        for path in paths:
             p = Path(path)
             if p.exists():
                 for line in p.read_text().splitlines():
                     if line.strip().startswith("nameserver "):
                         addr = line.split()[1]
-                        if addr not in ("127.0.0.1", "127.0.0.53", "::1"):
+                        if not ipaddress.ip_address(addr).is_loopback:
                             if addr not in ns:
                                 ns.append(addr)
                 if ns:
-                    break
-        return ns
+                    return ns
+        raise SetupError(
+            f"No nameserver for containers: {' and '.join(map(str, paths))}"
+            " list only loopback addresses."
+        )
 
     def run(self, args, check=True, input=None):
         """Run an incus command and return result."""
