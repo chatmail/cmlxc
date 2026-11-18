@@ -23,7 +23,7 @@ INSTALLED_INI = "/opt/cmrelay/chatmail.ini"
 # mtail, as cmrelay's precheck asks, from the closure's pins
 INSTALL_MTAIL = r"""
 import glob, hashlib, io, json, platform, tarfile, urllib.request
-[pins] = glob.glob("/opt/cmrelay/lib/store/*-cmrelay-closure/cmrelay/vendor/pins.json")
+[pins] = glob.glob("/opt/cmrelay/lib/store/*-cmrelay-closure/cmrelay/*/pins.json")
 url, sha256 = json.load(open(pins))["MTAIL_ARTIFACTS"][platform.machine()]
 data = urllib.request.urlopen(url, timeout=60).read()
 binary = tarfile.open(fileobj=io.BytesIO(data)).extractfile("mtail").read()
