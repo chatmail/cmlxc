@@ -142,7 +142,11 @@ def test_mad_stale_checkout_discarded():
 
 
 def test_mad_deploy():
-    cmlxc("deploy-madmail", "--source", "@main", CT_MAD)
+    cmlxc("deploy-madmail", CT_MAD)
+    # The default ref comes as a release binary, a source build leaves artifacts.
+    drv = MadmailDriver(Incus(Out()).get_relay_container(CT_MAD), Out())
+    deps = f"{drv.repo_path}/target/release/deps"
+    assert drv.get_builder().bash(f"test -e {deps}", check=False) is None
 
 
 def test_mad_deploy_type():

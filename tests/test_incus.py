@@ -1,6 +1,7 @@
 """Lightweight unit tests for pure logic in cmlxc.incus."""
 
 import shutil
+from types import SimpleNamespace
 
 import pytest
 
@@ -137,3 +138,13 @@ def test_deploy_type_defaults(ix):
     out = Out()
     assert CmdeployDriver(ct, out).type == "dns"
     assert MadmailDriver(ct, out).type == "ipv4"
+
+
+def test_madmail_prep_builder_installs_no_build_tools(ix):
+    scripts = []
+    bld_ct = SimpleNamespace(
+        bash=lambda script, check=True: scripts.append(script) or ""
+    )
+    MadmailDriver.prep_builder(ix, Out(), bld_ct)
+    assert scripts
+    assert not [s for s in scripts if "rustup" in s or "nodesource" in s]
