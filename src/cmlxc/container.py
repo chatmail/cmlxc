@@ -360,10 +360,15 @@ class RelayContainer(Container):
         image = super().launch(image_candidates=image_candidates)
         # Re-inject the current SSH key; cached images may have a stale one.
         pub_key = self.incus.ssh_key_path.with_suffix(".pub").read_text().strip()
+        # A cached image carries the nameservers of the host that built it.
+        host_ns = self.incus.get_host_nameservers()
+        ns_lines = "".join(f"nameserver {n}\\n" for n in host_ns)
         self.bash(f"""
             mkdir -p /root/.ssh && chmod 700 /root/.ssh
             echo '{pub_key}' > /root/.ssh/authorized_keys
             chmod 600 /root/.ssh/authorized_keys
+            rm -f /etc/resolv.conf
+            printf '{ns_lines}' > /etc/resolv.conf
             rm -f /etc/chatmail-version
             rm -f /etc/sysctl.d/99-disable-ipv6.conf
             sysctl -w net.ipv6.conf.all.disable_ipv6=0 2>/dev/null || true

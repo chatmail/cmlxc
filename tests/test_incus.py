@@ -1,6 +1,7 @@
 """Lightweight unit tests for pure logic in cmlxc.incus."""
 
 import shutil
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -110,6 +111,25 @@ def test_format_ssh_config():
     assert "IdentityFile /tmp/id_test" in text
     # container without IP is skipped
     assert "ns-localchat" not in text
+
+
+def test_relay_launch_writes_host_nameservers():
+    class RecordingIncus(Incus):
+        calls = []
+
+        def get_host_nameservers(self):
+            return ["10.0.0.1", "10.0.0.2"]
+
+        def run(self, args, check=True, input=None):
+            self.calls.append(args)
+            images = '[{"aliases": [{"name": "localchat-base"}]}]'
+            stdout = images if args[0] == "image" else ""
+            return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
+
+    incus = RecordingIncus(Out())
+    RelayContainer(incus, "t0").launch()
+    script = incus.calls[-1][-1]
+    assert r"'nameserver 10.0.0.1\nnameserver 10.0.0.2\n' > /etc/resolv.conf" in script
 
 
 @needs_incus
