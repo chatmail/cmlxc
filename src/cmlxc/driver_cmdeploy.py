@@ -125,6 +125,8 @@ class CmdeployDriver(Driver):
         self.bld_ct.write_relay_ssh_config(self.ct)
 
         dns_ct = self.get_dns_container()
+        # A cached base image carries the nameservers of the host that built it.
+        self.ct.setup_resolvconf_localchat_nameserver(dns_ct.ipv4)
 
         domain = self.get_test_domain_or_ip()
         if self.type == "dns":

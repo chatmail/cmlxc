@@ -67,6 +67,10 @@ def test_status():
 
 
 def test_cm_deploy():
+    # A cached base image names the nameservers of the host that built it.
+    ct0 = Incus(Out()).get_relay_container(CT0)
+    ct0.ensure()
+    ct0.setup_resolvconf_localchat_nameserver("192.0.2.53")
     cmlxc("deploy-cmdeploy", "--source", "@main", CT0)
     cmlxc("deploy-cmdeploy", "--source", "@main", CT1)
 

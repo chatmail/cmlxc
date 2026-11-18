@@ -69,6 +69,17 @@ def test_get_container_name():
     assert Incus.get_container_name("cm0-localchat") == "cm0-localchat"
 
 
+def test_get_host_nameservers(ix, tmp_path):
+    stub = tmp_path / "stub-resolv.conf"
+    stub.write_text("nameserver 127.0.0.53\nnameserver 127.0.1.1\nnameserver ::1\n")
+    upstream = tmp_path / "resolv.conf"
+    upstream.write_text("# uplink\nnameserver 192.0.2.1\nnameserver 192.0.2.1\n")
+    paths = [tmp_path / "missing", stub, upstream]
+    assert ix.get_host_nameservers(paths) == ["192.0.2.1"]
+    with pytest.raises(SetupError, match="loopback"):
+        ix.get_host_nameservers(paths[:2])
+
+
 def test_relay_container_naming(ix):
     ct = RelayContainer(ix, "t0")
     assert ct.shortname == "t0"
