@@ -1,4 +1,11 @@
 
+## [0.17.4] - 2026-11-18
+
+### Fixes
+
+- deploy madmail from its v2.42.0 release by default.
+
+
 ## [0.17.3] - 2026-11-18
 
 ### Fixes
