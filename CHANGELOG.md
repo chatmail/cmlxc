@@ -1,4 +1,15 @@
 
+## [0.17.5] - 2026-11-19
+
+### Fixes
+
+- give relay containers the launching host's nameservers.
+
+### Miscellaneous Tasks
+
+- don't install full incus package.
+
+
 ## [0.17.4] - 2026-11-18
 
 ### Fixes
