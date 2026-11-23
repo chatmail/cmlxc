@@ -72,24 +72,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Install Incus (Zabbly)
-        run: |
-          sudo mkdir -p /etc/apt/keyrings
-          sudo curl -fsSL https://pkgs.zabbly.com/key.asc -o /etc/apt/keyrings/zabbly.asc
-          echo "deb [signed-by=/etc/apt/keyrings/zabbly.asc] https://pkgs.zabbly.com/incus/stable $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/zabbly-incus.list
-          sudo apt-get update
-          sudo apt-get install -y incus-base incus-client
-          incus --version
-
-      - name: Initialise Incus
-        run: |
-          sudo systemctl stop docker.socket docker || true
-          sudo iptables -P FORWARD ACCEPT
-          sudo sysctl -w fs.inotify.max_user_instances=65535
-          sudo sysctl -w fs.inotify.max_user_watches=65535
-          sudo incus admin init --auto
-          sudo chmod 666 /var/lib/incus/unix.socket
-          sudo chown -R $USER:$USER ~/.config/incus
+      - uses: ./cmlxc/.github/actions/incus
 
       - uses: astral-sh/setup-uv@v9.0.0
 
