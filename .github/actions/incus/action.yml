@@ -1,0 +1,26 @@
+name: Set Incus up
+description: >-
+  Installs Zabbly's stable Incus unless the runner image brings it,
+  and initialises it for the runner's user without sudo.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        if [ ! -e /etc/apt/sources.list.d/zabbly-incus.list ]; then
+          sudo mkdir -p /etc/apt/keyrings
+          sudo curl -fsSL https://pkgs.zabbly.com/key.asc -o /etc/apt/keyrings/zabbly.asc
+          echo "deb [signed-by=/etc/apt/keyrings/zabbly.asc] https://pkgs.zabbly.com/incus/stable $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/zabbly-incus.list
+          sudo apt-get update
+          sudo apt-get install -y incus-base incus-client
+        fi
+        incus --version
+        # Stop docker to avoid iptables/nftables conflicts with Incus bridges
+        sudo systemctl stop docker.socket docker || true
+        sudo iptables -P FORWARD ACCEPT
+        sudo sysctl -w fs.inotify.max_user_instances=65535
+        sudo sysctl -w fs.inotify.max_user_watches=65535
+        sudo incus admin init --auto
+        # Allow runner to access Incus without 'sg' or 'sudo'
+        sudo chmod 666 /var/lib/incus/unix.socket
+        sudo chown -R "$USER:$USER" ~/.config/incus
