@@ -1,4 +1,19 @@
 
+## [0.18.0] - 2026-11-23
+
+### Features / Changes
+
+- deploy relays from a cmrelay installer file.
+
+### Fixes
+
+- list containers that incus is still creating.
+
+### Other
+
+- avoid duplicating incus install.
+
+
 ## [0.17.5] - 2026-11-19
 
 ### Fixes
