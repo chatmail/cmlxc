@@ -110,14 +110,16 @@ class Incus:
                 for line in p.read_text().splitlines():
                     if line.strip().startswith("nameserver "):
                         addr = line.split()[1]
-                        if not ipaddress.ip_address(addr).is_loopback:
+                        ip = ipaddress.ip_address(addr)
+                        # link-local addresses are scoped to a host interface
+                        if not (ip.is_loopback or ip.is_link_local):
                             if addr not in ns:
                                 ns.append(addr)
                 if ns:
                     return ns
         raise SetupError(
             f"No nameserver for containers: {' and '.join(map(str, paths))}"
-            " list only loopback addresses."
+            " list only loopback or link-local addresses."
         )
 
     def run(self, args, check=True, input=None):
