@@ -1,4 +1,11 @@
 
+## [0.18.1] - 2026-11-27
+
+### Fixes
+
+- skip link-local host nameservers when building the base image.
+
+
 ## [0.18.0] - 2026-11-23
 
 ### Features / Changes
