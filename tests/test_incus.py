@@ -76,7 +76,9 @@ def test_get_host_nameservers(ix, tmp_path):
     stub = tmp_path / "stub-resolv.conf"
     stub.write_text("nameserver 127.0.0.53\nnameserver 127.0.1.1\nnameserver ::1\n")
     upstream = tmp_path / "resolv.conf"
-    upstream.write_text("# uplink\nnameserver 192.0.2.1\nnameserver 192.0.2.1\n")
+    upstream.write_text(
+        "# uplink\nnameserver 192.0.2.1\nnameserver fe80::1%wlp3s0\nnameserver 192.0.2.1\n"
+    )
     paths = [tmp_path / "missing", stub, upstream]
     assert ix.get_host_nameservers(paths) == ["192.0.2.1"]
     with pytest.raises(SetupError, match="loopback"):
